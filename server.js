@@ -1,0 +1,1103 @@
+#!/usr/bin/env node
+
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const crypto = require('node:crypto');
+const { spawn } = require('node:child_process');
+const { buildExecutionPlan } = require('./orchestrator');
+
+const ROOT = __dirname;
+const PUBLIC_DIR = path.join(ROOT, 'public');
+const TOOLKIT_HOME = process.env.SECURITY_TOOLKIT_HOME || path.join(os.homedir(), 'security-toolkit');
+const HOST = '127.0.0.1';
+const PORT = Number(process.env.PORT || 4567);
+
+const TOOL_META = {
+  gitleaks: { label: 'Gitleaks', purpose: 'Secret scanner', command: 'gitleaks' },
+  trufflehog: { label: 'TruffleHog', purpose: 'Credential detector', command: 'trufflehog' },
+  semgrep: { label: 'Semgrep', purpose: 'Source code security', command: 'semgrep' },
+  trivy: { label: 'Trivy', purpose: 'Dependencies + config', command: 'trivy' },
+  'osv-scanner': { label: 'OSV-Scanner', purpose: 'Dependency intelligence', command: 'osv-scanner' },
+  checkov: { label: 'Checkov', purpose: 'Infrastructure config', command: 'checkov' },
+  zap: { label: 'OWASP ZAP', purpose: 'Local web runtime', command: 'zap' },
+  nuclei: { label: 'Nuclei', purpose: 'Authorized web templates', command: 'nuclei' },
+};
+
+const STAGE_META = [
+  { id: 'discovery', label: 'Project discovery', description: 'Identify stack, manifests, entry points' },
+  { id: 'threat-model', label: 'Threat model', description: 'Record trust boundaries and sensitive actions' },
+  { id: 'secrets', label: 'Secrets', description: 'Find credentials without exposing them' },
+  { id: 'static', label: 'Static analysis', description: 'Review dangerous code patterns' },
+  { id: 'dependencies', label: 'Dependencies', description: 'Check known vulnerable components' },
+  { id: 'infrastructure', label: 'Infrastructure', description: 'Inspect IaC and container configuration' },
+  { id: 'web', label: 'Web / runtime', description: 'Scan only an authorized local target' },
+  { id: 'manual', label: 'Manual security review', description: 'Human reasoning still required' },
+  { id: 'fix', label: 'Fix', description: 'Apply and document root-cause fixes' },
+  { id: 'rescan', label: 'Re-scan', description: 'Run the relevant scanner again' },
+  { id: 'decision', label: 'Final decision', description: 'Release gate based on performed evidence' },
+];
+
+const COMMAND_ENV = {
+  ...process.env,
+  ...(process.env.SECURITY_TOOL_PATHS
+    ? { PATH: `${process.env.SECURITY_TOOL_PATHS}${path.delimiter}${process.env.PATH || ''}` }
+    : {}),
+  SEMGREP_SEND_METRICS: 'off',
+  SEMGREP_ENABLE_VERSION_CHECK: '0',
+  DO_NOT_TRACK: '1',
+  CI: '1',
+};
+
+function ensureDirectory(dir) {
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function writableDirectory(preferred, fallback) {
+  try {
+    ensureDirectory(preferred);
+    fs.accessSync(preferred, fs.constants.W_OK);
+    return preferred;
+  } catch {
+    ensureDirectory(fallback);
+    return fallback;
+  }
+}
+
+const DATA_DIR = writableDirectory(
+  process.env.SECURITY_DASHBOARD_DATA_DIR || path.join(TOOLKIT_HOME, 'runs'),
+  path.join(ROOT, 'runs'),
+);
+
+const runs = new Map();
+const subscribers = new Map();
+
+function isoNow() {
+  return new Date().toISOString();
+}
+
+function atomicWrite(filePath, value) {
+  const temporary = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, value, 'utf8');
+  fs.renameSync(temporary, filePath);
+}
+
+function redact(value) {
+  return String(value || '')
+    .replace(/(sk-(?:proj-)?)[A-Za-z0-9_-]{10,}/g, '$1…[REDACTED]')
+    .replace(/(AKIA)[A-Z0-9]{12,}/g, '$1…[REDACTED]')
+    .replace(/(xox[baprs]-)[A-Za-z0-9-]{10,}/g, '$1…[REDACTED]')
+    .replace(/(gh[pousr]_[A-Za-z0-9_]{8,})/g, 'gh_…[REDACTED]')
+    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, '$1[REDACTED]')
+    .replace(/((?:password|secret|token|api[_-]?key|private[_-]?key)\s*[:=]\s*["']?)[^\s"']{8,}/gi, '$1[REDACTED]');
+}
+
+function writeEvent(run, event) {
+  const safeEvent = {
+    timestamp: isoNow(),
+    ...event,
+    message: redact(event.message || ''),
+  };
+  run.events.push(safeEvent);
+  fs.appendFileSync(path.join(run.dir, 'events.jsonl'), `${JSON.stringify(safeEvent)}\n`, 'utf8');
+  const listeners = subscribers.get(run.id) || [];
+  for (const listener of listeners) listener(safeEvent);
+}
+
+function saveRun(run) {
+  const metadata = {
+    id: run.id,
+    projectName: run.projectName,
+    projectPath: run.projectPath,
+    mode: run.mode,
+    webTarget: run.webTarget || null,
+    status: run.status,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt || null,
+    currentStage: run.currentStage,
+    stages: run.stages,
+    tools: run.tools,
+    stack: run.stack,
+    orchestration: run.orchestration || null,
+    summary: run.summary,
+    releaseGate: run.releaseGate,
+    dataDir: DATA_DIR,
+  };
+  atomicWrite(path.join(run.dir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+}
+
+function createStages() {
+  return STAGE_META.reduce((stages, stage) => {
+    stages[stage.id] = {
+      id: stage.id,
+      label: stage.label,
+      description: stage.description,
+      status: 'WAITING',
+      startedAt: null,
+      finishedAt: null,
+      note: '',
+    };
+    return stages;
+  }, {});
+}
+
+function createTools() {
+  return Object.entries(TOOL_META).reduce((tools, [id, meta]) => {
+    tools[id] = {
+      id,
+      label: meta.label,
+      purpose: meta.purpose,
+      status: 'WAITING',
+      version: null,
+      startedAt: null,
+      finishedAt: null,
+      durationMs: null,
+      findingsCount: 0,
+      decision: 'RUN',
+      decisionReason: '',
+      exitCode: null,
+      error: null,
+    };
+    return tools;
+  }, {});
+}
+
+function createRun({ projectPath, mode, webTarget }) {
+  const orchestration = mode === 'auto' ? buildExecutionPlan({ projectPath, webTarget }) : null;
+  const id = `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex')}`;
+  const dir = ensureDirectory(path.join(DATA_DIR, id));
+  const tools = createTools();
+  try {
+    const lock = JSON.parse(fs.readFileSync(path.join(TOOLKIT_HOME, 'security-toolchain.lock'), 'utf8'));
+    for (const [toolId, tool] of Object.entries(lock.tools || {})) if (tools[toolId]) tools[toolId].version = tool.version || null;
+  } catch { /* the toolkit health page reports missing lock data separately */ }
+  if (orchestration) {
+    for (const decision of orchestration.tools) {
+      if (!tools[decision.tool]) continue;
+      tools[decision.tool].decision = decision.decision;
+      tools[decision.tool].decisionReason = decision.reason;
+      if (decision.decision !== 'RUN') tools[decision.tool].status = decision.decision;
+    }
+  }
+  const run = {
+    id,
+    dir,
+    projectPath,
+    projectName: path.basename(projectPath) || projectPath,
+    mode,
+    webTarget: webTarget || null,
+    status: 'SCANNING',
+    startedAt: isoNow(),
+    finishedAt: null,
+    currentStage: 'discovery',
+    stages: createStages(),
+    tools,
+    orchestration,
+    stack: [],
+    findings: [],
+    resolvedFindings: [],
+    events: [],
+    summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+    releaseGate: { label: 'DO NOT DEPLOY', reason: 'Assessment is still running.' },
+    processes: new Set(),
+    abortRequested: false,
+  };
+  runs.set(id, run);
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), '', 'utf8');
+  atomicWrite(path.join(dir, 'findings.json'), '[]\n');
+  saveRun(run);
+  writeEvent(run, { kind: 'scan-started', message: `Scan started: ${run.mode} audit for ${run.projectName}` });
+  return run;
+}
+
+function stageStart(run, stageId) {
+  run.currentStage = stageId;
+  const stage = run.stages[stageId];
+  stage.status = 'RUNNING';
+  stage.startedAt = isoNow();
+  stage.finishedAt = null;
+  writeEvent(run, { kind: 'stage-started', stage: stageId, message: `${stage.label} started` });
+  saveRun(run);
+}
+
+function stageFinish(run, stageId, status, note = '') {
+  const stage = run.stages[stageId];
+  stage.status = status;
+  stage.finishedAt = isoNow();
+  stage.note = redact(note);
+  writeEvent(run, { kind: 'stage-finished', stage: stageId, status, message: `${stage.label}: ${status}${note ? ` — ${note}` : ''}` });
+  saveRun(run);
+}
+
+function skipStage(run, stageId, note) {
+  run.stages[stageId].status = 'SKIPPED';
+  run.stages[stageId].note = note;
+  writeEvent(run, { kind: 'stage-skipped', stage: stageId, status: 'SKIPPED', message: `${run.stages[stageId].label}: skipped — ${note}` });
+  saveRun(run);
+}
+
+function resolveBinary(name) {
+  let configured = {};
+  try {
+    configured = JSON.parse(process.env.SECURITY_TOOL_BINARIES || '{}');
+  } catch {
+    configured = {};
+  }
+  return typeof configured[name] === 'string' && configured[name].trim()
+    ? configured[name].trim()
+    : name;
+}
+
+function parseJsonLoose(text) {
+  const value = String(text || '').trim();
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    const firstObject = value.indexOf('{');
+    const lastObject = value.lastIndexOf('}');
+    if (firstObject >= 0 && lastObject > firstObject) {
+      try { return JSON.parse(value.slice(firstObject, lastObject + 1)); } catch { /* continue */ }
+    }
+    const firstArray = value.indexOf('[');
+    const lastArray = value.lastIndexOf(']');
+    if (firstArray >= 0 && lastArray > firstArray) {
+      try { return JSON.parse(value.slice(firstArray, lastArray + 1)); } catch { /* continue */ }
+    }
+  }
+  return null;
+}
+
+function normalizeSeverity(value, fallback = 'MEDIUM') {
+  const severity = String(value || '').toUpperCase();
+  if (severity.includes('CRITICAL')) return 'CRITICAL';
+  if (severity.includes('HIGH') || severity === 'ERROR') return 'HIGH';
+  if (severity.includes('MEDIUM') || severity === 'WARNING') return 'MEDIUM';
+  if (severity.includes('LOW')) return 'LOW';
+  return fallback;
+}
+
+function findingId(scanner, file, title) {
+  const hash = crypto.createHash('sha256').update(`${scanner}|${file || ''}|${title || ''}`).digest('hex').slice(0, 10);
+  return `${scanner.toUpperCase()}-${hash}`;
+}
+
+function makeFinding(run, { scanner, severity, title, category, file, endpoint, technical, simple, why }) {
+  const item = {
+    id: findingId(scanner, file || endpoint, title),
+    severity: normalizeSeverity(severity),
+    scanner,
+    category: category || 'Security finding',
+    title: redact(title),
+    file: redact(file || ''),
+    endpoint: redact(endpoint || ''),
+    technical: redact(technical || title),
+    simple: redact(simple || 'This may allow an unsafe action or expose information if it is reachable.'),
+    why: redact(why || 'The issue can increase the chance of unauthorized access, data exposure, or unsafe execution.'),
+    status: 'OPEN',
+    firstSeen: run.id,
+    lastSeen: run.id,
+    history: [{ runId: run.id, status: 'OPEN', severity: normalizeSeverity(severity) }],
+  };
+  return item;
+}
+
+function parseGitleaks(text, run) {
+  const data = parseJsonLoose(text);
+  if (!Array.isArray(data)) return [];
+  return data.map((item) => makeFinding(run, {
+    scanner: 'gitleaks', severity: 'HIGH', category: 'Secret exposure',
+    title: item.Description || item.RuleID || 'Potential secret detected',
+    file: `${item.File || 'unknown'}${item.StartLine ? `:${item.StartLine}` : ''}`,
+    technical: `Secret detector rule ${item.RuleID || 'matched'} reported a credential-like value. The value is intentionally redacted.`,
+    simple: 'A credential-like value may be inside the project and could be reused by someone who gets the code.',
+    why: 'Secrets committed to source or build output may grant access to external services. Rotate real credentials if this is not synthetic.',
+  }));
+}
+
+function parseTrufflehog(text, run) {
+  const findings = [];
+  for (const line of String(text || '').split('\n')) {
+    const item = parseJsonLoose(line);
+    if (!item || !item.DetectorName) continue;
+    const file = item.SourceMetadata?.Data?.Filesystem?.file || 'unknown';
+    findings.push(makeFinding(run, {
+      scanner: 'trufflehog', severity: 'HIGH', category: 'Secret exposure',
+      title: `${item.DetectorName} credential detected`, file,
+      technical: `TruffleHog identified a ${item.DetectorName} detector match. The credential value is redacted.`,
+      simple: 'This file looks like it contains a credential that should not be reachable by the project.',
+      why: 'A valid credential can allow unauthorized access. Treat real matches as incidents and rotate them.',
+    }));
+  }
+  return findings;
+}
+
+function parseSemgrep(text, run) {
+  const data = parseJsonLoose(text);
+  const results = Array.isArray(data?.results) ? data.results : [];
+  return results.map((item) => {
+    const message = item.extra?.message || item.check_id || 'Potential insecure code pattern';
+    const file = `${item.path || 'unknown'}${item.start?.line ? `:${item.start.line}` : ''}`;
+    return makeFinding(run, {
+      scanner: 'semgrep', severity: item.extra?.severity, category: 'Static analysis', title: message, file,
+      technical: `${item.check_id || 'Semgrep rule'}: ${message}`,
+      simple: 'A code pattern may let untrusted input cross a security boundary without enough checking.',
+      why: 'The actual impact depends on reachability and data flow, so this needs review and a focused fix or documented false-positive decision.',
+    });
+  });
+}
+
+function parseTrivy(text, run) {
+  const data = parseJsonLoose(text);
+  const findings = [];
+  for (const result of data?.Results || []) {
+    for (const item of result.Vulnerabilities || []) {
+      findings.push(makeFinding(run, {
+        scanner: 'trivy', severity: item.Severity, category: 'Dependency vulnerability',
+        title: `${item.VulnerabilityID || 'Vulnerability'}: ${item.Title || item.PkgName || 'vulnerable dependency'}`,
+        file: result.Target || item.PkgName || 'dependency manifest',
+        technical: `${item.PkgName || 'Package'} ${item.InstalledVersion || ''} is associated with ${item.VulnerabilityID || 'a known vulnerability'}${item.FixedVersion ? `; fixed in ${item.FixedVersion}` : ''}.`,
+        simple: 'A third-party component used by this project has a published security issue.',
+        why: item.FixedVersion ? `Upgrade or otherwise remove the affected path. A fixed version is available: ${item.FixedVersion}.` : 'Check the advisory and determine whether this component is reachable in the shipped artifact.',
+      }));
+    }
+  }
+  return findings;
+}
+
+function parseOsv(text, run) {
+  const data = parseJsonLoose(text);
+  const findings = [];
+  for (const result of data?.results || []) {
+    for (const pkg of result.packages || []) {
+      for (const vuln of pkg.vulnerabilities || []) {
+        findings.push(makeFinding(run, {
+          scanner: 'osv-scanner', severity: vuln.database_specific?.severity || vuln.severity?.[0]?.score, category: 'Dependency vulnerability',
+          title: `${vuln.id || 'OSV finding'}: ${vuln.summary || 'Known dependency vulnerability'}`,
+          file: result.source?.path || pkg.package?.name || 'dependency manifest',
+          technical: `${pkg.package?.name || 'Package'} ${pkg.package?.version || ''} matched ${vuln.id || 'an OSV advisory'}.`,
+          simple: 'The project uses a dependency version that a public vulnerability database has flagged.',
+          why: 'Independent dependency evidence helps confirm whether an upgrade or compensating control is needed.',
+        }));
+      }
+    }
+  }
+  return findings;
+}
+
+function parseCheckov(text, run) {
+  const data = parseJsonLoose(text);
+  const failed = data?.results?.failed_checks || [];
+  return failed.map((item) => makeFinding(run, {
+    scanner: 'checkov', severity: item.severity, category: 'Infrastructure configuration',
+    title: `${item.check_id || 'IaC check'}: ${item.check_name || 'Configuration issue'}`,
+    file: `${item.file_path || 'infrastructure'}${item.file_line_range ? `:${item.file_line_range.join('-')}` : ''}`,
+    technical: item.check_name || 'Checkov reported a failed infrastructure security check.',
+    simple: 'A deployment or infrastructure setting may be more exposed than intended.',
+    why: item.guideline || 'Infrastructure defaults can turn a small application mistake into a broad exposure.',
+  }));
+}
+
+function parseNuclei(text, run) {
+  const findings = [];
+  for (const line of String(text || '').split('\n')) {
+    const item = parseJsonLoose(line);
+    if (!item || !item.info) continue;
+    findings.push(makeFinding(run, {
+      scanner: 'nuclei', severity: item.info.severity, category: 'Local web runtime',
+      title: item.info.name || item['template-id'] || 'Nuclei detection',
+      endpoint: item['matched-at'] || item.host || 'authorized local target',
+      technical: `${item['template-id'] || 'Nuclei template'} matched the authorized local target.`,
+      simple: 'A runtime check found a web behavior worth reviewing on the local test target.',
+      why: item.info.description || 'Runtime findings can reveal issues that source-only scanners do not see.',
+    }));
+  }
+  return findings;
+}
+
+function parserFor(tool) {
+  return {
+    gitleaks: parseGitleaks,
+    trufflehog: parseTrufflehog,
+    semgrep: parseSemgrep,
+    trivy: parseTrivy,
+    'osv-scanner': parseOsv,
+    checkov: parseCheckov,
+    nuclei: parseNuclei,
+  }[tool];
+}
+
+function updateToolVersion(tool) {
+  const commands = {
+    gitleaks: ['version'],
+    trufflehog: ['--version'],
+    semgrep: ['--version'],
+    trivy: ['--version'],
+    'osv-scanner': ['--version'],
+    checkov: ['--version'],
+    nuclei: ['-version'],
+  };
+  return new Promise((resolve) => {
+    const command = resolveBinary(tool);
+    const child = spawn(command, commands[tool] || ['--version'], { env: COMMAND_ENV });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.stderr.on('data', (chunk) => { output += chunk; });
+    child.on('close', () => resolve(redact(output).trim().split('\n')[0] || null));
+    child.on('error', () => resolve(null));
+  });
+}
+
+function executeScanner(run, { tool, stage, args, outputName, parser, reportPath }) {
+  return new Promise((resolve) => {
+    const meta = run.tools[tool];
+    const started = Date.now();
+    meta.status = 'RUNNING';
+    meta.startedAt = isoNow();
+    writeEvent(run, { kind: 'tool-started', stage, tool, message: `${meta.label} started` });
+    saveRun(run);
+
+    const child = spawn(resolveBinary(tool), args, { cwd: run.projectPath, env: COMMAND_ENV, stdio: ['ignore', 'pipe', 'pipe'] });
+    run.processes.add(child);
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+    child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+    const finish = (exitCode, error) => {
+      if (!run.processes.has(child)) return;
+      run.processes.delete(child);
+      let parserInput = stdout;
+      if (reportPath && fs.existsSync(reportPath)) {
+        parserInput = fs.readFileSync(reportPath, 'utf8');
+      }
+      const safeStdout = redact(stdout);
+      const safeStderr = redact(stderr);
+      const output = `${safeStdout}${safeStderr ? `\n${safeStderr}` : ''}`;
+      if (outputName) atomicWrite(path.join(run.dir, outputName), output);
+      if (reportPath && fs.existsSync(reportPath)) atomicWrite(reportPath, redact(parserInput));
+      const findings = parser ? parser(parserInput, run) : [];
+      run.findings.push(...findings);
+      meta.findingsCount = findings.length;
+      meta.exitCode = exitCode;
+      meta.durationMs = Date.now() - started;
+      meta.finishedAt = isoNow();
+      meta.version = meta.version || null;
+      if (run.abortRequested || error?.code === 'ABORT_ERR') meta.status = 'STOPPED';
+      else if (error || exitCode === null) { meta.status = 'ERROR'; meta.error = redact(error?.message || 'Process failed to start'); }
+      else meta.status = findings.length > 0 || exitCode > 1 ? 'FAIL' : 'PASS';
+      writeEvent(run, {
+        kind: 'tool-finished', stage, tool, status: meta.status, exitCode,
+        message: `${meta.label} ${meta.status}${findings.length ? ` — ${findings.length} finding${findings.length === 1 ? '' : 's'}` : ''}`,
+      });
+      saveRun(run);
+      resolve({ status: meta.status, findings });
+    };
+    child.on('error', (error) => finish(null, error));
+    child.on('close', (code) => finish(code, null));
+  });
+}
+
+function safeProjectPath(input) {
+  if (typeof input !== 'string' || !input.trim() || input.includes('\0') || input.includes('://')) return null;
+  const resolved = path.resolve(input.trim());
+  const forbidden = [path.parse(resolved).root, os.homedir(), TOOLKIT_HOME, DATA_DIR];
+  if (forbidden.includes(resolved)) return null;
+  try {
+    const stats = fs.statSync(resolved);
+    return stats.isDirectory() ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeWebTarget(input) {
+  if (!input) return null;
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol !== 'http:') return null;
+    const allowed = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+    const configured = String(process.env.SECURITY_AUTHORIZED_TARGETS || '').split(',').map((item) => item.trim()).filter(Boolean);
+    return allowed.has(parsed.hostname) || configured.includes(input) ? parsed.toString().replace(/\/$/, '') : null;
+  } catch {
+    return null;
+  }
+}
+
+function detectStack(projectPath) {
+  const names = new Set();
+  const stack = [];
+  const add = (label) => { if (!stack.includes(label)) stack.push(label); };
+  const files = new Set();
+  const visit = (dir, depth = 0) => {
+    if (depth > 2) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (['.git', 'node_modules', '.next', 'dist', 'build', '.venv', '__pycache__'].includes(entry.name)) continue;
+      files.add(entry.name);
+      if (entry.isDirectory()) visit(path.join(dir, entry.name), depth + 1);
+    }
+  };
+  visit(projectPath);
+  const packagePath = path.join(projectPath, 'package.json');
+  let packageData = {};
+  try { packageData = JSON.parse(fs.readFileSync(packagePath, 'utf8')); } catch { /* no package manifest */ }
+  const deps = { ...(packageData.dependencies || {}), ...(packageData.devDependencies || {}) };
+  if (files.has('package.json')) add('Node.js');
+  if (deps.react) add('React');
+  if (deps.next) add('Next.js');
+  if (deps.vite) add('Vite');
+  if (deps.vue) add('Vue');
+  if (files.has('requirements.txt') || files.has('pyproject.toml')) add('Python');
+  if (files.has('manage.py') || deps.django) add('Django');
+  if (files.has('Dockerfile') || files.has('docker-compose.yml') || files.has('compose.yml')) add('Docker');
+  if ([...files].some((file) => file.endsWith('.tf'))) add('Terraform');
+  if ([...files].some((file) => file.endsWith('.yaml') || file.endsWith('.yml'))) add('YAML / CI');
+  if (files.has('supabase') || files.has('supabase')) add('Supabase');
+  if (!stack.length) add('Unclassified project');
+  names.add(...stack);
+  return { stack, files: [...names] };
+}
+
+function hasInfrastructure(projectPath) {
+  const candidates = ['Dockerfile', 'docker-compose.yml', 'compose.yml', 'template.yaml', 'serverless.yml'];
+  if (candidates.some((file) => fs.existsSync(path.join(projectPath, file)))) return true;
+  try {
+    return fs.readdirSync(projectPath).some((file) => file.endsWith('.tf') || file === 'k8s' || file === 'kubernetes');
+  } catch { return false; }
+}
+
+function countFindings(findings) {
+  return findings.reduce((counts, finding) => {
+    const key = String(finding.severity || 'LOW').toLowerCase();
+    counts[key] = (counts[key] || 0) + 1;
+    counts.total += 1;
+    return counts;
+  }, { critical: 0, high: 0, medium: 0, low: 0, total: 0 });
+}
+
+function readPreviousFindings(projectPath, currentId) {
+  const all = [];
+  for (const entry of fs.readdirSync(DATA_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === currentId) continue;
+    try {
+      const metadata = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'metadata.json'), 'utf8'));
+      if (metadata.projectPath !== projectPath) continue;
+      const findings = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'findings.json'), 'utf8'));
+      all.push(...findings.map((item) => ({ ...item, previousRunId: entry.name })));
+    } catch { /* ignore incomplete prior runs */ }
+  }
+  return all;
+}
+
+function isValidRunId(id) {
+  return /^[0-9]{14}-[a-f0-9]{6}$/.test(String(id || ''));
+}
+
+function finalizeFindings(run) {
+  const unique = new Map();
+  for (const finding of run.findings) {
+    if (!unique.has(finding.id)) unique.set(finding.id, finding);
+  }
+  run.findings = [...unique.values()];
+  const currentIds = new Set(run.findings.map((finding) => finding.id));
+  const previous = readPreviousFindings(run.projectPath, run.id);
+  const previousById = new Map(previous.map((finding) => [finding.id, finding]));
+  for (const finding of run.findings) {
+    const old = previousById.get(finding.id);
+    if (old) {
+      finding.firstSeen = old.firstSeen || old.previousRunId;
+      finding.history = [...(old.history || []), { runId: run.id, status: 'OPEN', severity: finding.severity }];
+    }
+  }
+  for (const old of previousById.values()) {
+    if (!currentIds.has(old.id) && old.status !== 'VERIFIED') {
+      run.resolvedFindings.push({
+        ...old,
+        status: 'VERIFIED',
+        lastSeen: run.id,
+        resolvedInRun: run.id,
+        history: [...(old.history || []), { runId: run.id, status: 'VERIFIED', severity: old.severity }],
+      });
+    }
+  }
+  run.summary = countFindings(run.findings);
+  atomicWrite(path.join(run.dir, 'findings.json'), `${JSON.stringify([...run.findings, ...run.resolvedFindings], null, 2)}\n`);
+}
+
+function buildReport(run) {
+  const all = [...run.findings, ...run.resolvedFindings];
+  const lines = [
+    '# Security Assessment', '',
+    '## Executive Summary', '',
+    `- Project: ${redact(run.projectName)}`,
+    `- Path: ${redact(run.projectPath)}`,
+    `- Date: ${run.startedAt}`,
+    `- Scan Mode: ${run.mode}`,
+    `- Stack: ${run.stack.join(', ') || 'Unknown'}`,
+    `- Overall Risk: ${run.summary.critical || run.summary.high ? 'HIGH' : run.summary.medium ? 'MEDIUM' : 'LOW'}`,
+    `- Release Decision: ${run.releaseGate.label}`,
+    '', '## Scanner Status', '',
+    '| Tool | Status | Findings | Exit code |', '| --- | --- | ---: | ---: |',
+  ];
+  for (const tool of Object.values(run.tools)) lines.push(`| ${tool.label} | ${tool.status} | ${tool.findingsCount ?? '—'} | ${tool.exitCode ?? '—'} |`);
+  lines.push('', '## Findings', '');
+  if (!all.length) lines.push('No findings were parsed from the scanners that ran.', '');
+  for (const finding of all) {
+    lines.push(`### ${finding.id} — ${finding.severity}`, '',
+      `- Scanner: ${finding.scanner}`,
+      `- Category: ${finding.category}`,
+      `- Location: ${finding.file || finding.endpoint || 'Not specified'}`,
+      `- Title: ${finding.title}`,
+      `- Technical explanation: ${finding.technical}`,
+      `- Simple explanation: ${finding.simple}`,
+      `- Why it matters: ${finding.why}`,
+      `- Status: ${finding.status}`, '');
+  }
+  lines.push('## Remaining Risks', '', '- Manual security review is not automated by this dashboard.', '- A clean scanner result does not prove the project is perfectly secure.', '');
+  return `${redact(lines.join('\n'))}\n`;
+}
+
+function finishRun(run) {
+  finalizeFindings(run);
+  const unresolvedHigh = run.summary.critical + run.summary.high;
+  const toolErrors = Object.values(run.tools).filter((tool) => tool.status === 'ERROR' || (tool.status === 'FAIL' && tool.findingsCount === 0 && (tool.exitCode || 0) > 1)).length;
+  const manualSkipped = run.stages.manual.status === 'SKIPPED';
+  const incompleteAssessment = run.mode !== 'full' || manualSkipped || run.stages.web.status === 'SKIPPED';
+  if (run.abortRequested) run.releaseGate = { label: 'DO NOT DEPLOY', reason: 'The scan was stopped before the assessment completed.' };
+  else if (unresolvedHigh > 0) run.releaseGate = { label: 'DO NOT DEPLOY', reason: `${unresolvedHigh} unresolved Critical/High finding${unresolvedHigh === 1 ? '' : 's'}.` };
+  else if (toolErrors > 0) run.releaseGate = { label: 'DO NOT DEPLOY', reason: `${toolErrors} scanner${toolErrors === 1 ? '' : 's'} failed to execute.` };
+  else if (incompleteAssessment) run.releaseGate = { label: 'DO NOT DEPLOY', reason: 'The performed assessment still has skipped runtime or manual review stages.' };
+  else run.releaseGate = { label: 'READY TO DEPLOY', reason: 'No known Critical/High findings detected by the performed assessment.' };
+  run.status = run.abortRequested ? 'STOPPED' : unresolvedHigh > 0 || toolErrors > 0 ? 'FAIL' : incompleteAssessment || run.summary.total > 0 ? 'PASS WITH WARNINGS' : 'PASS';
+  run.finishedAt = isoNow();
+  run.currentStage = 'decision';
+  run.stages.decision.status = run.status === 'FAIL' ? 'FAIL' : run.status === 'PASS' ? 'PASS' : 'WARNING';
+  run.stages.decision.finishedAt = run.finishedAt;
+  atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
+  saveRun(run);
+  writeEvent(run, { kind: 'scan-finished', stage: 'decision', status: run.status, message: `Scan finished: ${run.status}. ${run.releaseGate.reason}` });
+  saveRun(run);
+}
+
+function planDecision(run, tool) {
+  return run.orchestration?.tools?.find((item) => item.tool === tool) || { tool, decision: 'RUN', reason: 'Legacy scan mode.' };
+}
+
+function plannedToolIds(run, toolIds) {
+  return toolIds.filter((tool) => planDecision(run, tool).decision === 'RUN');
+}
+
+function plannedStageNote(run, toolIds) {
+  return toolIds.map((tool) => {
+    const item = planDecision(run, tool);
+    return `${tool}: ${item.decision} — ${item.reason}`;
+  }).join(' ');
+}
+
+function plannedStageStatus(run, toolIds) {
+  return toolIds.some((tool) => ['ERROR', 'FAIL'].includes(run.tools[tool]?.status)) ? 'FAIL' : 'PASS';
+}
+
+async function runPlannedAudit(run) {
+  stageStart(run, 'discovery');
+  const discovery = detectStack(run.projectPath);
+  run.stack = discovery.stack;
+  writeEvent(run, {
+    kind: 'stack-detected',
+    stage: 'discovery',
+    message: `Stack detected: ${run.stack.join(' + ')}`,
+  });
+  stageFinish(run, 'discovery', 'PASS', `${discovery.files.length} relevant project signals found`);
+  writeEvent(run, {
+    kind: 'orchestration-planned',
+    stage: 'discovery',
+    message: `${run.orchestration.risk} risk: ${run.orchestration.summary.selected} selected, ${run.orchestration.summary.skipped} skipped, ${run.orchestration.summary.recommended} recommended`,
+  });
+
+  skipStage(run, 'threat-model', 'Not automated; record or review the project threat model before release.');
+
+  const executeStage = async (stage, specs, note = '') => {
+    const selected = plannedToolIds(run, specs.map((spec) => spec.tool));
+    if (!selected.length) {
+      skipStage(run, stage, note || plannedStageNote(run, specs.map((spec) => spec.tool)));
+      return;
+    }
+    stageStart(run, stage);
+    for (const spec of specs) {
+      if (!selected.includes(spec.tool)) continue;
+      await executeScanner(run, { ...spec, stage });
+    }
+    stageFinish(run, stage, plannedStageStatus(run, selected), plannedStageNote(run, specs.map((spec) => spec.tool)));
+  };
+
+  await executeStage('secrets', [
+    { tool: 'gitleaks', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')], outputName: 'gitleaks-output.txt', parser: parseGitleaks, reportPath: path.join(run.dir, 'gitleaks-report.json') },
+    { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: parseTrufflehog },
+  ]);
+  await executeStage('static', [
+    { tool: 'semgrep', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json', parser: parseSemgrep },
+  ]);
+
+  const categories = new Set(run.orchestration.categories);
+  if (categories.has('DEPENDENCY_CHANGE')) {
+    await executeStage('dependencies', [
+      { tool: 'osv-scanner', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json', parser: parseOsv },
+      { tool: 'trivy', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json', parser: parseTrivy },
+    ]);
+  } else {
+    skipStage(run, 'dependencies', plannedStageNote(run, ['osv-scanner', 'trivy']));
+  }
+
+  if (categories.has('IAC_CHANGE') || categories.has('CONTAINER_CHANGE')) {
+    await executeStage('infrastructure', [
+      { tool: 'checkov', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json', parser: parseCheckov },
+      { tool: 'trivy', args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath], outputName: 'trivy-config-output.json', parser: parseTrivy },
+    ]);
+  } else {
+    skipStage(run, 'infrastructure', plannedStageNote(run, ['checkov', 'trivy']));
+  }
+
+  const webTools = plannedToolIds(run, ['nuclei', 'zap']);
+  if (webTools.length) {
+    const target = safeWebTarget(run.webTarget);
+    if (!target) skipStage(run, 'web', 'The automatic plan selected runtime checks, but no authorized localhost target is available.');
+    else {
+      stageStart(run, 'web');
+      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl', parser: parseNuclei });
+      if (webTools.includes('zap')) {
+        const zapPath = resolveBinary('zap');
+        if (zapPath !== 'zap' && fs.existsSync(zapPath)) await executeScanner(run, { tool: 'zap', stage: 'web', args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.html'), '-quickprogress'], outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.html') });
+        else {
+          run.tools.zap.status = 'SKIPPED';
+          writeEvent(run, { kind: 'tool-skipped', stage: 'web', tool: 'zap', message: 'OWASP ZAP binary was not found.' });
+        }
+      }
+      stageFinish(run, 'web', plannedStageStatus(run, webTools), `Authorized target: ${target}`);
+    }
+  } else {
+    skipStage(run, 'web', plannedStageNote(run, ['zap', 'nuclei']));
+  }
+
+  skipStage(run, 'manual', 'Manual security review belongs to Codex and the developer; the dashboard cannot pretend to perform it.');
+  skipStage(run, 'fix', 'No automatic fixes are executed by the observability layer.');
+  skipStage(run, 'rescan', 'A rescan is a separate run so history stays append-only.');
+  stageStart(run, 'decision');
+  finishRun(run);
+}
+
+async function runAudit(run) {
+  try {
+    if (run.mode === 'auto') {
+      await runPlannedAudit(run);
+      return;
+    }
+    stageStart(run, 'discovery');
+    const discovery = detectStack(run.projectPath);
+    run.stack = discovery.stack;
+    writeEvent(run, { kind: 'stack-detected', stage: 'discovery', message: `Stack detected: ${run.stack.join(' + ')}` });
+    stageFinish(run, 'discovery', 'PASS', `${discovery.files.length} relevant project signals found`);
+
+    skipStage(run, 'threat-model', 'Not automated; record or review the project threat model before release.');
+    stageStart(run, 'secrets');
+    await executeScanner(run, {
+      tool: 'gitleaks', stage: 'secrets',
+      args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')],
+      outputName: 'gitleaks-output.txt', parser: parseGitleaks, reportPath: path.join(run.dir, 'gitleaks-report.json'),
+    });
+    await executeScanner(run, {
+      tool: 'trufflehog', stage: 'secrets',
+      args: ['filesystem', run.projectPath, '--no-verification', '--json'],
+      outputName: 'trufflehog-output.jsonl', parser: parseTrufflehog,
+    });
+    stageFinish(run, 'secrets', [run.tools.gitleaks, run.tools.trufflehog].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
+
+    stageStart(run, 'static');
+    await executeScanner(run, {
+      tool: 'semgrep', stage: 'static',
+      args: ['scan', '--config=p/security-audit', run.projectPath, '--json'],
+      outputName: 'semgrep-output.json', parser: parseSemgrep,
+    });
+    stageFinish(run, 'static', run.tools.semgrep.status === 'ERROR' || run.tools.semgrep.status === 'FAIL' ? 'FAIL' : 'PASS');
+
+    stageStart(run, 'dependencies');
+    await executeScanner(run, {
+      tool: 'osv-scanner', stage: 'dependencies',
+      args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath],
+      outputName: 'osv-output.json', parser: parseOsv,
+    });
+    await executeScanner(run, {
+      tool: 'trivy', stage: 'dependencies',
+      args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath],
+      outputName: 'trivy-output.json', parser: parseTrivy,
+    });
+    stageFinish(run, 'dependencies', [run.tools['osv-scanner'], run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
+
+    if (run.mode === 'full' && hasInfrastructure(run.projectPath)) {
+      stageStart(run, 'infrastructure');
+      await executeScanner(run, {
+        tool: 'checkov', stage: 'infrastructure',
+        args: ['-d', run.projectPath, '--output', 'json'],
+        outputName: 'checkov-output.json', parser: parseCheckov,
+      });
+      await executeScanner(run, {
+        tool: 'trivy', stage: 'infrastructure',
+        args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath],
+        outputName: 'trivy-config-output.json', parser: parseTrivy,
+      });
+      stageFinish(run, 'infrastructure', [run.tools.checkov, run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
+    } else skipStage(run, 'infrastructure', run.mode === 'quick' ? 'Quick mode keeps infrastructure scanning out of the frequent loop.' : 'No supported infrastructure files detected.');
+
+    const target = safeWebTarget(run.webTarget);
+    if (run.mode === 'full' && target) {
+      stageStart(run, 'web');
+      await executeScanner(run, {
+        tool: 'nuclei', stage: 'web',
+        args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'],
+        outputName: 'nuclei-output.jsonl', parser: parseNuclei,
+      });
+      const zapPath = resolveBinary('zap');
+      if (zapPath !== 'zap' && fs.existsSync(zapPath)) {
+        await executeScanner(run, {
+          tool: 'zap', stage: 'web',
+          args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.html'), '-quickprogress'],
+          outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.html'),
+        });
+      } else {
+        run.tools.zap.status = 'SKIPPED';
+        writeEvent(run, { kind: 'tool-skipped', stage: 'web', tool: 'zap', message: 'OWASP ZAP binary was not found.' });
+      }
+      stageFinish(run, 'web', [run.tools.nuclei, run.tools.zap].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS', `Authorized target: ${target}`);
+    } else skipStage(run, 'web', run.mode === 'quick' ? 'Quick mode does not run active web scanners.' : 'No authorized localhost/test target was supplied.');
+
+    skipStage(run, 'manual', 'Manual security review belongs to Codex and the developer; the dashboard cannot pretend to perform it.');
+    skipStage(run, 'fix', 'No automatic fixes are executed by the observability layer.');
+    skipStage(run, 'rescan', 'A rescan is a separate run so history stays append-only.');
+    stageStart(run, 'decision');
+    finishRun(run);
+  } catch (error) {
+    run.status = 'FAIL';
+    run.releaseGate = { label: 'DO NOT DEPLOY', reason: redact(error.message || 'Unexpected dashboard error') };
+    writeEvent(run, { kind: 'scan-error', stage: run.currentStage, status: 'FAIL', message: run.releaseGate.reason });
+    finishRun(run);
+  }
+}
+
+function readRuns() {
+  const result = [];
+  for (const entry of fs.readdirSync(DATA_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    try {
+      const metadata = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'metadata.json'), 'utf8'));
+      result.push(metadata);
+    } catch { /* ignore incomplete atomic writes */ }
+  }
+  return result.sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+}
+
+function hydrateRun(id) {
+  if (!isValidRunId(id)) return null;
+  if (runs.has(id)) return runs.get(id);
+  const dir = path.join(DATA_DIR, id);
+  try {
+    const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'));
+    const findings = JSON.parse(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'));
+    const events = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
+    const run = { ...metadata, dir, findings: findings.filter((item) => item.status !== 'VERIFIED'), resolvedFindings: findings.filter((item) => item.status === 'VERIFIED'), events, processes: new Set(), abortRequested: false };
+    try {
+      const lock = JSON.parse(fs.readFileSync(path.join(TOOLKIT_HOME, 'security-toolchain.lock'), 'utf8'));
+      for (const [toolId, tool] of Object.entries(lock.tools || {})) if (run.tools?.[toolId] && !run.tools[toolId].version) run.tools[toolId].version = tool.version || null;
+    } catch { /* health view reports missing lock data */ }
+    runs.set(id, run);
+    return run;
+  } catch {
+    return null;
+  }
+}
+
+function parseDoctor(output) {
+  const tools = {};
+  for (const line of String(output || '').split('\n')) {
+    const match = line.match(/^\[OK\]\s+(\S+):\s+INSTALLED\s+\(([^)]+)\)\s*-\s*(.*)$/);
+    if (!match) continue;
+    const id = match[1] === 'zap' ? 'zap' : match[1];
+    tools[id] = { id, label: TOOL_META[id]?.label || id, status: 'HEALTHY', path: match[2], version: redact(match[3]) };
+  }
+  const zap = String(output || '').match(/^\[OK\]\s+zap: INSTALLED \(([^)]+)\)/m);
+  if (zap) tools.zap = { id: 'zap', label: 'OWASP ZAP', status: 'HEALTHY', path: zap[1], version: 'Installed' };
+  for (const id of Object.keys(TOOL_META)) if (!tools[id]) tools[id] = { id, label: TOOL_META[id].label, status: 'BROKEN', path: null, version: null };
+  const overall = String(output || '').match(/OVERALL TOOLCHAIN HEALTH:\s+(HEALTHY|DEGRADED|BROKEN)/)?.[1] || 'UNKNOWN';
+  return { overall, tools, checkedAt: isoNow() };
+}
+
+function parseToolchainLock(output) {
+  const data = parseJsonLoose(output);
+  return {
+    tools: data?.tools || {},
+    optionalTools: data?.optional_tools || {},
+  };
+}
+
+function runFixedCommand(tool, args = []) {
+  return new Promise((resolve) => {
+    const child = spawn(resolveBinary(tool), args, { env: COMMAND_ENV, cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+    let output = '';
+    child.stdout.on('data', (chunk) => { output += chunk; });
+    child.stderr.on('data', (chunk) => { output += chunk; });
+    child.on('close', (code) => resolve({ code, output: redact(output) }));
+    child.on('error', (error) => resolve({ code: null, output: redact(error.message) }));
+  });
+}
+
+async function toolkitHealth() {
+  const [doctor, status] = await Promise.all([
+    runFixedCommand('security-tools', ['doctor']),
+    runFixedCommand('security-tools', ['status']),
+  ]);
+  const parsedDoctor = parseDoctor(doctor.output);
+  const lockTools = parseToolchainLock(status.output);
+  for (const [id, tool] of Object.entries(parsedDoctor.tools)) {
+    if (lockTools.tools[id]) {
+      tool.version = lockTools.tools[id].version || tool.version;
+      tool.path = lockTools.tools[id].binary || tool.path;
+      tool.installMethod = lockTools.tools[id].install_method || null;
+      tool.lastSelfTest = lockTools.tools[id].last_self_test || null;
+    }
+  }
+  return {
+    doctor: parsedDoctor,
+    optionalTools: lockTools.optionalTools,
+    statusOutput: status.output,
+    doctorOutput: doctor.output,
+  };
+}
+
+async function readBody(request) {
+  let body = '';
+  for await (const chunk of request) {
+    body += chunk;
+    if (body.length > 1024 * 1024) throw new Error('Request body too large');
+  }
+  return body ? JSON.parse(body) : {};
+}
+
+function sendJson(response, statusCode, payload) {
+  const body = JSON.stringify(payload);
+  response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+  response.end(body);
+}
+
+function sendText(response, statusCode, body, contentType = 'text/plain; charset=utf-8') {
+  response.writeHead(statusCode, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
+  response.end(body);
+}
+
+function publicFile(requestPath, response) {
+  const requested = requestPath === '/' ? '/index.html' : requestPath;
+  const filePath = path.resolve(PUBLIC_DIR, `.${requested}`);
+  if (!filePath.startsWith(`${PUBLIC_DIR}${path.sep}`)) return sendText(response, 403, 'Forbidden');
+  const contentTypes = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
+  fs.readFile(filePath, (error, data) => {
+    if (error) return sendText(response, 404, 'Not found');
+    response.writeHead(200, {
+      'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream',
+      'Cache-Control': 'no-cache',
+      'Content-Security-Policy': "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'",
+    });
+    response.end(data);
+  });
+}
+
+function openEventStream(request, response, run) {
+  response.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  response.write(`event: snapshot\ndata: ${JSON.stringify({ run })}\n\n`);
+  const listeners = subscribers.get(run.id) || [];
+  const listener = (event) => response.write(`event: activity\ndata: ${JSON.stringify(event)}\n\n`);
+  listeners.push(listener);
+  subscribers.set(run.id, listeners);
+  request.on('close', () => {
+    const current = subscribers.get(run.id) || [];
+    subscribers.set(run.id, current.filter((item) => item !== listener));
+  });
+}
+
+const server = http.createServer(async (request, response) => {
+  response.setHeader('X-Content-Type-Options', 'nosniff');
+  response.setHeader('Referrer-Policy', 'no-referrer');
+  response.setHeader('X-Frame-Options', 'DENY');
+  const parsed = new URL(request.url, `http://${HOST}:${PORT}`);
+  const pathname = parsed.pathname;
+
+  try {
+    if (request.method === 'GET' && pathname === '/api/health') return sendJson(response, 200, { ok: true, host: HOST, port: PORT, dataDir: DATA_DIR, localOnly: true });
+    if (request.method === 'GET' && pathname === '/api/runs') return sendJson(response, 200, { runs: readRuns() });
+    if (request.method === 'GET' && pathname === '/api/state') {
+      const history = readRuns();
+      const latest = history[0] ? hydrateRun(history[0].id) : null;
+      return sendJson(response, 200, { latest, runs: history });
+    }
+    if (request.method === 'GET' && pathname === '/api/toolkit') return sendJson(response, 200, await toolkitHealth());
+    if (request.method === 'GET' && pathname.startsWith('/api/runs/') && pathname.endsWith('/events')) {
+      const id = pathname.split('/')[3];
+      const run = hydrateRun(id);
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      return openEventStream(request, response, run);
+    }
+    if (request.method === 'GET' && pathname.startsWith('/api/runs/') && pathname.endsWith('/report')) {
+      const id = pathname.split('/')[3];
+      const run = hydrateRun(id);
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      let report = '';
+      try { report = fs.readFileSync(path.join(run.dir, 'security-report.md'), 'utf8'); } catch { report = 'Report is not ready yet.'; }
+      return sendText(response, 200, redact(report), 'text/markdown; charset=utf-8');
+    }
+    if (request.method === 'GET' && pathname.startsWith('/api/runs/')) {
+      const id = pathname.split('/')[3];
+      const run = hydrateRun(id);
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      return sendJson(response, 200, { run });
+    }
+    if (request.method === 'POST' && pathname === '/api/scans') {
+      const body = await readBody(request);
+      const projectPath = safeProjectPath(body.projectPath);
+      const mode = ['auto', 'full', 'quick'].includes(body.mode) ? body.mode : null;
+      if (!projectPath || !mode) return sendJson(response, 400, { error: 'Use an existing local project directory and auto/quick/full mode.' });
+      const webTarget = body.webTarget ? safeWebTarget(body.webTarget) : null;
+      if (body.webTarget && !webTarget) return sendJson(response, 400, { error: 'Web targets must be authorized localhost or an explicitly configured test target.' });
+      const active = [...runs.values()].find((run) => run.status === 'SCANNING');
+      if (active) return sendJson(response, 409, { error: `A scan is already running: ${active.id}` });
+      const run = createRun({ projectPath, mode, webTarget });
+      void runAudit(run);
+      return sendJson(response, 202, { runId: run.id });
+    }
+    if (request.method === 'POST' && pathname.startsWith('/api/runs/') && pathname.endsWith('/stop')) {
+      const id = pathname.split('/')[3];
+      const run = hydrateRun(id);
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      run.abortRequested = true;
+      for (const child of run.processes) child.kill('SIGTERM');
+      writeEvent(run, { kind: 'scan-stop-requested', message: 'Stop requested; waiting for the active scanner to exit.' });
+      return sendJson(response, 202, { ok: true });
+    }
+    if (request.method === 'POST' && pathname === '/api/toolkit/doctor') return sendJson(response, 200, await toolkitHealth());
+    if (request.method === 'POST' && pathname === '/api/toolkit/self-test') {
+      const result = await runFixedCommand('security-tools', ['self-test']);
+      return sendJson(response, 200, { code: result.code, output: result.output, healthy: result.code === 0 && /ALL PASSED/.test(result.output) });
+    }
+    if (request.method === 'GET') return publicFile(pathname, response);
+    return sendJson(response, 405, { error: 'Method not allowed' });
+  } catch (error) {
+    return sendJson(response, 500, { error: redact(error.message || 'Unexpected dashboard error') });
+  }
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`Local Security Dashboard listening on http://${HOST}:${PORT}`);
+  console.log(`Run data directory: ${DATA_DIR}`);
+});

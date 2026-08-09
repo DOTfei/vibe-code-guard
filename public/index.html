@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f6f8" />
+    <title>Local Security Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <!--
+      THESIS: A local security run reads like a durable ledger, not a theater dashboard; the category default of decorative SOC walls is refused.
+      OWN-WORLD: Cool graphite paper, ink-blue structure, amber decision markers, and a restrained checklist grammar for every state.
+      STORY: The developer sees what is running, what evidence exists, what remains unreviewed, and whether the release gate is safe to trust.
+      FIRST VIEWPORT: A compact top bar leads into the current release gate, a vertical pipeline ledger, and the live scanner rail; actions sit beside the project path.
+      FORM: Operate / instrument-panel ledger, candidate 5, seed key 70fb0b85. Surface seed: 374cb453. Roll ran degraded with no challengers; assumptions are explicit in PRODUCT.md.
+      FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+    -->
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Primary navigation">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+          <div>
+            <p class="brand-name">Security<br />Dashboard</p>
+            <p class="brand-subtitle">local observability</p>
+          </div>
+        </div>
+        <div class="local-badge"><span class="status-dot status-dot--green"></span><span>127.0.0.1 only</span></div>
+        <nav class="nav-list" aria-label="Dashboard sections">
+          <button class="nav-item is-active" data-view="overview"><span class="nav-index">01</span><span>Overview</span></button>
+          <button class="nav-item" data-view="findings"><span class="nav-index">02</span><span>Findings</span><span class="nav-count" id="nav-findings-count">N/A</span></button>
+          <button class="nav-item" data-view="history"><span class="nav-index">03</span><span>History</span></button>
+          <button class="nav-item" data-view="toolkit"><span class="nav-index">04</span><span>Toolkit health</span></button>
+        </nav>
+        <div class="sidebar-note">
+          <span class="eyebrow">Operating rule</span>
+          <p>Evidence from local scanners only. No known Critical/High findings is not the same as perfect security.</p>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Local Security Workstation</p>
+            <h1 id="page-title">Audit overview</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="connection-status"><span class="status-dot status-dot--green"></span><span id="connection-label">Local server connected</span></span>
+            <button class="button button--ghost" id="refresh-button" type="button">Refresh</button>
+          </div>
+        </header>
+
+        <section class="control-strip" aria-label="Scan controls">
+          <div class="field field--project">
+            <label for="project-path">Project path</label>
+            <input id="project-path" type="text" placeholder="~/Projects/my-app" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="field field--target">
+            <label for="web-target">Authorized web target <span>(auto/full only)</span></label>
+            <input id="web-target" type="url" placeholder="http://127.0.0.1:3000" autocomplete="off" spellcheck="false" />
+          </div>
+          <div class="control-actions">
+            <button class="button button--secondary" id="auto-scan" type="button">Auto scan</button>
+            <button class="button button--secondary" id="quick-scan" type="button">Quick scan</button>
+            <button class="button button--primary" id="full-scan" type="button">Full scan</button>
+            <button class="button button--danger is-hidden" id="stop-scan" type="button">Stop scan</button>
+          </div>
+          <p class="form-message" id="form-message" role="status"></p>
+        </section>
+
+        <div class="views">
+          <section class="view is-active" id="view-overview" data-view-panel="overview">
+            <div class="overview-heading">
+              <div>
+                <p class="eyebrow">Current assessment</p>
+                <h2 id="current-project">No scan started</h2>
+                <p class="muted" id="current-project-meta">Choose a local project to begin. The dashboard will store only scan metadata and sanitized output.</p>
+              </div>
+              <div class="overview-actions"><button class="button button--ghost" id="rescan-scan" type="button" disabled>Re-scan</button><button class="button button--ghost" id="open-report" type="button" disabled>Open report</button></div>
+            </div>
+
+            <div class="overview-grid">
+              <article class="gate-panel panel" id="gate-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Release gate</p>
+                    <h3 id="gate-label">Assessment pending</h3>
+                  </div>
+                  <span class="status-chip status-chip--neutral" id="overall-status">WAITING</span>
+                </div>
+                <div class="gate-rule" id="gate-rule">Run a scan to establish evidence.</div>
+                <div class="gate-metrics">
+                  <div><span class="metric-label">Critical</span><strong id="metric-critical">N/A</strong></div>
+                  <div><span class="metric-label">High</span><strong id="metric-high">N/A</strong></div>
+                  <div><span class="metric-label">Medium</span><strong id="metric-medium">N/A</strong></div>
+                  <div><span class="metric-label">Low</span><strong id="metric-low">N/A</strong></div>
+                </div>
+              </article>
+
+              <article class="summary-panel panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Run details</p>
+                    <h3>What is happening</h3>
+                  </div>
+                  <span class="live-marker" id="live-marker"><span></span> idle</span>
+                </div>
+                <dl class="run-details">
+                  <div><dt>Mode</dt><dd id="run-mode">N/A</dd></div>
+                  <div><dt>Started</dt><dd id="run-started">N/A</dd></div>
+                  <div><dt>Duration</dt><dd id="run-duration">N/A</dd></div>
+                  <div><dt>Current stage</dt><dd id="run-stage">Waiting</dd></div>
+                </dl>
+                <p class="summary-explanation" id="summary-explanation">The current screen will reflect real scanner events as they arrive.</p>
+              </article>
+            </div>
+
+            <section class="orchestration-panel panel" aria-live="polite">
+              <div class="panel-header"><div><p class="eyebrow">Decision record</p><h3>Automatic plan</h3></div><span class="status-chip status-chip--neutral" id="orchestration-risk">N/A</span></div>
+              <div class="orchestration-summary" id="orchestration-summary">Run Auto scan to analyze the current Git change set and choose relevant checks.</div>
+              <div class="orchestration-tags" id="orchestration-tags"></div>
+              <div class="orchestration-tools" id="orchestration-tools"></div>
+              <div class="orchestration-explanation" id="orchestration-explanation"></div>
+            </section>
+
+            <section class="section-block pipeline-block">
+              <div class="section-heading">
+                <div><p class="eyebrow">The run ledger</p><h3>Security pipeline</h3></div>
+                <span class="section-caption" id="pipeline-caption">Waiting for a run</span>
+              </div>
+              <div class="pipeline" id="pipeline-list" aria-live="polite"></div>
+            </section>
+
+            <section class="section-block">
+              <div class="section-heading">
+                <div><p class="eyebrow">Independent evidence</p><h3>Scanner status</h3></div>
+                <button class="text-button" id="toolkit-link" type="button" data-view="toolkit">View toolkit health</button>
+              </div>
+              <div class="tool-grid" id="tool-grid"></div>
+            </section>
+
+            <section class="bottom-grid">
+              <article class="activity-panel panel">
+                <div class="panel-header"><div><p class="eyebrow">Append-only event stream</p><h3>Live activity</h3></div><span class="tiny-label">JSONL</span></div>
+                <div class="activity-list" id="activity-list" aria-live="polite"></div>
+              </article>
+              <article class="explanation-panel panel">
+                <p class="eyebrow">Plain language</p>
+                <h3>How to read this screen</h3>
+                <div class="explanation-list">
+                  <div><span class="explanation-key key-running"></span><p><strong>Running</strong> means a real child process is active now.</p></div>
+                  <div><span class="explanation-key key-pass"></span><p><strong>Pass</strong> means that scanner completed without parsed findings.</p></div>
+                  <div><span class="explanation-key key-warning"></span><p><strong>Warning</strong> means the assessment completed with limits or lower-severity findings.</p></div>
+                  <div><span class="explanation-key key-fail"></span><p><strong>Fail</strong> means findings or execution errors need attention.</p></div>
+                </div>
+              </article>
+            </section>
+          </section>
+
+          <section class="view" id="view-findings" data-view-panel="findings">
+            <div class="page-intro"><p class="eyebrow">Evidence, not assumptions</p><h2>Findings</h2><p class="muted">Every item below came from a scanner output saved for the selected run. Credential values are always redacted.</p></div>
+            <div class="findings-toolbar"><div class="filter-tabs" role="tablist" aria-label="Finding severity"><button class="filter-tab is-active" data-severity="ALL" type="button">All <span id="finding-count-all">0</span></button><button class="filter-tab" data-severity="CRITICAL" type="button">Critical <span id="finding-count-critical">0</span></button><button class="filter-tab" data-severity="HIGH" type="button">High <span id="finding-count-high">0</span></button><button class="filter-tab" data-severity="MEDIUM" type="button">Medium <span id="finding-count-medium">0</span></button><button class="filter-tab" data-severity="LOW" type="button">Low <span id="finding-count-low">0</span></button></div><span class="section-caption" id="finding-run-label">No run selected</span></div>
+            <div class="findings-list" id="findings-list"></div>
+          </section>
+
+          <section class="view" id="view-history" data-view-panel="history">
+            <div class="page-intro"><p class="eyebrow">Keep the trail</p><h2>Scan history</h2><p class="muted">Runs are append-only. A finding disappearing on a later run is shown as verified, never erased from history.</p></div>
+            <div class="history-list" id="history-list"></div>
+          </section>
+
+          <section class="view" id="view-toolkit" data-view-panel="toolkit">
+            <div class="page-intro page-intro--split"><div><p class="eyebrow">The scanners are the evidence</p><h2>Toolkit health</h2><p class="muted">This page reads the real <code>security-tools doctor</code> and <code>security-tools status</code> commands.</p></div><div class="health-actions"><button class="button button--secondary" id="run-doctor" type="button">Run doctor</button><button class="button button--ghost" id="run-self-test" type="button">Run self-test</button></div></div>
+            <div class="health-summary panel"><div><span class="eyebrow">Overall toolchain</span><strong id="health-overall">Checking</strong></div><div><span class="eyebrow">Last checked</span><strong id="health-checked">N/A</strong></div><div><span class="eyebrow">Data location</span><strong class="mono" id="health-data">N/A</strong></div></div>
+            <div class="health-grid" id="health-grid"></div>
+            <div class="health-section-label">Optional components</div>
+            <div class="health-grid health-grid--optional" id="optional-health-grid"></div>
+            <pre class="command-output is-hidden" id="toolkit-output"></pre>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <dialog class="report-dialog" id="report-dialog">
+      <div class="dialog-header"><div><p class="eyebrow">Sanitized artifact</p><h2>Security report</h2></div><button class="icon-button" id="close-report" type="button" aria-label="Close report">Close</button></div>
+      <pre id="report-content">Report is not ready yet.</pre>
+    </dialog>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

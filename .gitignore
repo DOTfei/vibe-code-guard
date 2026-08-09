@@ -1,0 +1,45 @@
+node_modules/
+.DS_Store
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Scanner and runtime output
+runs/*
+!runs/.gitkeep
+security-toolkit-runs/
+strix_runs/
+zap-session/
+zap-sessions/
+*.session
+*.sqlite
+*.sqlite3
+*.db
+*.log
+logs/
+trivy-cache/
+nuclei-cache/
+nuclei-templates/
+.semgrep/
+.cache/
+
+# Temporary and test output
+tmp/
+temp/
+*.tmp
+*.temp
+coverage/
+.nyc_output/
+
+# Local editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
