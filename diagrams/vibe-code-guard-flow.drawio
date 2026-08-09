@@ -1,0 +1,34 @@
+<mxfile host="next-ai-draw-io" modified="2026-08-10T00:00:00.000Z" agent="Security Orchestrator" version="1.0">
+  <diagram id="vibe-code-guard-flow" name="Vibe Code Guard Flow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="a" value="AI writes code" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="40" y="80" width="180" height="60" as="geometry" /></mxCell>
+        <mxCell id="b" value="Detect what changed" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="280" y="80" width="220" height="60" as="geometry" /></mxCell>
+        <mxCell id="c" value="Risk &amp; policy gate" style="rhombus;whiteSpace=wrap;html=1;fillColor=#5b3a0e;fontColor=#fff8e8;strokeColor=#f2b84b;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="560" y="55" width="180" height="110" as="geometry" /></mxCell>
+        <mxCell id="d" value="Select relevant checks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="800" y="80" width="220" height="60" as="geometry" /></mxCell>
+        <mxCell id="e" value="Run real scanners locally" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#173d33;fontColor=#effff8;strokeColor=#72e0b0;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1080" y="80" width="240" height="60" as="geometry" /></mxCell>
+        <mxCell id="j" value="ZAP &amp; Nuclei" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#173d33;fontColor=#effff8;strokeColor=#72e0b0;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1110" y="250" width="180" height="60" as="geometry" /></mxCell>
+        <mxCell id="k" value="Strix deep audit" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#3b1f45;fontColor=#fff4ff;strokeColor=#e8a5ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="830" y="250" width="190" height="60" as="geometry" /></mxCell>
+        <mxCell id="f" value="Explain findings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1080" y="410" width="200" height="60" as="geometry" /></mxCell>
+        <mxCell id="g" value="Fix &amp; rescan" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="760" y="580" width="180" height="60" as="geometry" /></mxCell>
+        <mxCell id="h" value="Human security review" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1060" y="580" width="220" height="60" as="geometry" /></mxCell>
+        <mxCell id="i" value="Continue or ship" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#123047;fontColor=#f7fbff;strokeColor=#8bd3ff;strokeWidth=2;" vertex="1" parent="1"><mxGeometry x="1060" y="730" width="220" height="60" as="geometry" /></mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="a" target="b"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="b" target="c"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="c" target="d"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e4" value="quick / full / auto" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="d" target="e"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="e" target="f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="j" target="f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e7" value="localhost / authorized test only" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#72e0b0;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="e" target="j"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e8" value="optional / explicit approval" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1;strokeColor=#e8a5ff;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="d" target="k"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#e8a5ff;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="k" target="f"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="f" target="g"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="f" target="h"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="h" target="i"><mxGeometry relative="1" as="geometry" /></mxCell>
+        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#666666;endArrow=block;flowAnimation=1;" edge="1" parent="1" source="g" target="b"><mxGeometry relative="1" as="geometry" /></mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,24 @@
+graph TD
+  A["AI writes code"] --> B["Detect what changed"]
+  B --> C{"Risk + policy gate"}
+  C --> D["Select relevant checks"]
+  D --> E["Run real scanners locally"]
+  E --> F["Explain findings"]
+  F --> G["Fix + rescan"]
+  G --> B
+  F --> H["Human security review"]
+  H --> I["Continue or ship"]
+  D -. "quick / full / auto" .-> E
+  E -. "web checks: localhost or authorized test only" .-> J["ZAP + Nuclei"]
+  D -. "optional, explicit approval" .-> K["Strix deep audit"]
+  J --> F
+  K --> F
+
+  classDef product fill:#123047,stroke:#8bd3ff,color:#f7fbff,stroke-width:2px;
+  classDef decision fill:#5b3a0e,stroke:#f2b84b,color:#fff8e8,stroke-width:2px;
+  classDef scanner fill:#173d33,stroke:#72e0b0,color:#effff8,stroke-width:2px;
+  classDef safety fill:#3b1f45,stroke:#e8a5ff,color:#fff4ff,stroke-width:2px;
+  class A,B,D,F,G,H,I product;
+  class C decision;
+  class E,J scanner;
+  class K safety;

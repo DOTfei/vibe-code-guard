@@ -23,3 +23,10 @@ thank their maintainers and contributors:
 The project does not claim authorship of these tools and does not include their
 source code, binaries, templates, rules, or databases. See
 `THIRD_PARTY_NOTICES.md` for license and integration-boundary details.
+
+## Documentation tooling
+
+[Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io) was used as an
+external diagram editing/export tool for the README architecture visualization.
+Its MCP server loaded and exported the `.drawio` source; no Next AI Draw.io
+source code, binary, or runtime dependency is bundled in this repository.

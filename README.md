@@ -1,40 +1,76 @@
-# Security Orchestrator
+# Vibe Code Guard
 
-**Status: Early Alpha / Active Development**
-**Release line: `v0.1.0-alpha`**
-**Tested platform: macOS**
+**Local-first security orchestration for AI-assisted software.**
 
-Security Orchestrator is an open-source, local-first security orchestration
-layer for AI-assisted and “vibe-coded” software development. It coordinates
-existing security tools, applies deterministic policies to changed code, and
-provides a local dashboard for evidence and run history.
+`v0.1.0-alpha` · Early Alpha / Active Development · macOS tested
 
-It is not a replacement for, and does not claim authorship of, Gitleaks,
-TruffleHog, Semgrep, Trivy, OSV-Scanner, Checkov, OWASP ZAP, Nuclei, or Strix.
-Those projects are invoked as independently installed upstream tools. Their
-licenses and attribution requirements are recorded in
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
-[`third-party/tools.json`](third-party/tools.json).
+> AI writes code fast. Security review needs to keep up.
 
-## Current capabilities
+Vibe Code Guard is the local-first safety layer for AI-assisted and
+“vibe-coded” software. It sees what changed, chooses the checks that matter,
+runs real open-source scanners locally, and explains what needs attention.
 
-- Global toolkit health checks through `security-tools doctor`.
-- Synthetic scanner regression checks through `security-tools self-test`.
-- `security-check quick`, `full`, `secrets`, `static`, `dependencies`, `infra`,
-  `web`, and `report` modes.
-- Security Orchestrator v1 with deterministic Git/file-change classification.
-- LOW/MEDIUM/HIGH change-risk classification.
-- Mandatory policy evaluation and applicability decisions.
-- Automatic selection of relevant scanners for an auditable execution plan.
-- Explicit skip and not-applicable reasons rather than silent omission.
-- JSONL execution events and sanitized scan history.
-- A local Dashboard showing real scanner execution state, findings, history,
-  rescan behavior, and a release-gate summary.
-- Optional Strix metadata and recommended-status handling. Strix is not a core
-  tool, is not installed by this repository, and is never started implicitly.
+<p align="center">
+  <img src="diagrams/vibe-code-guard-flow-next-ai-drawio.svg" alt="Animated Vibe Code Guard flow exported by Next AI Draw.io: detect changes, choose checks, scan locally, explain findings, fix, and rescan" width="1100" />
+</p>
 
-The existing global CLI remains usable without the Dashboard. The Dashboard
-invokes only predefined actions and does not expose arbitrary shell execution.
+Animation fallback: [view the GIF version](diagrams/vibe-code-guard-overview.gif).
+
+<details>
+<summary>Open the editable architecture diagrams</summary>
+
+- [Compact overview: GIF](diagrams/vibe-code-guard-overview.gif) ·
+  [Mermaid](diagrams/vibe-code-guard-overview.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-overview.excalidraw)
+- [Detailed flow: GIF](diagrams/vibe-code-guard-flow.gif) ·
+  [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-flow-next-ai-drawio.svg) ·
+  [SVG source](diagrams/vibe-code-guard-flow-animated.svg) ·
+  [draw.io](diagrams/vibe-code-guard-flow.drawio) ·
+  [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-flow.excalidraw)
+
+The diagrams are generated from this repository's own architecture. The
+draw.io-compatible source can be refined in tools such as
+[Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io); no upstream
+source code or service dependency is bundled here. The detailed draw.io source
+uses animated connectors (flowAnimation=1) and was checked with the upstream
+project's MCP loader/validator.
+</details>
+
+## What it does now
+
+- **Understands the change:** deterministic Git/file inspection, risk levels,
+  mandatory policies, and applicability decisions.
+- **Runs the right checks:** quick, full, or change-aware `auto` plans using the
+  existing local security toolkit.
+- **Shows the evidence:** real scanner state, findings, skip reasons, history,
+  and a conservative release-gate summary in the local Dashboard.
+- **Keeps active testing bounded:** ZAP and Nuclei stay localhost/test-focused;
+  Strix remains optional and requires explicit approval.
+
+It is an orchestration layer, not a new scanner. Upstream tools keep their own
+licenses and attribution; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+<details>
+<summary>Which upstream tools are involved?</summary>
+
+Gitleaks, TruffleHog, Semgrep, Trivy, OSV-Scanner, Checkov, OWASP ZAP, Nuclei,
+and optional Strix are invoked as independently installed upstream tools. This
+repository does not bundle their binaries, source, rules, templates, or
+databases. See [`third-party/tools.json`](third-party/tools.json) for the
+portable integration record.
+</details>
+
+## Three ways to use it
+
+| When | Command | What it does |
+| --- | --- | --- |
+| While coding | `security-check quick .` | Fast secrets, static, and dependency checks |
+| Before release | `security-check full .` | Broader code, dependency, and infrastructure checks |
+| When the change matters | `security-check auto .` | Classifies the change and explains every run/skip decision |
+
+The local Dashboard shows the same real execution state, findings, history, and
+release-gate result in a browser. It does not expose arbitrary shell execution.
 
 ## Roadmap / Not yet complete
 
@@ -55,7 +91,7 @@ Security Coverage Engine, an AI fix/rescan loop, Strix deep-audit execution,
 automatic disposable runtime environments, hardened toolchain update/rollback,
 and expanded integration tests are not complete yet.
 
-## Security and privacy boundaries
+## Safety by default
 
 No scanner or combination of scanners can guarantee that software is
 vulnerability-free. This project provides checks and visibility; it is not a
@@ -71,88 +107,74 @@ The Dashboard defaults to:
 - no cloud database requirement; and
 - local, append-only run history.
 
-External scanners may contact their upstream services to obtain vulnerability
-databases, rules, templates, or add-ons. Review each tool's behavior and
-network policy for your environment. Optional Strix use may send source,
-findings, or execution context to an external LLM provider when explicitly
-configured and authorized; it is not enabled by default.
+External scanners may contact upstream services for vulnerability databases,
+rules, templates, or add-ons. Review their network behavior for your
+environment.
 
-ZAP, Nuclei, and Strix can perform active testing. Use runtime or penetration-
-testing features only against systems you own or are explicitly authorized to
-test. Automatic web behavior remains localhost-focused and does not use random
-public websites as examples or defaults.
+ZAP, Nuclei, and Strix can perform active testing.
+Use them only against systems you own or are explicitly authorized to test.
+Automatic web behavior remains localhost-focused.
 
-## Prerequisites
+<details>
+<summary>External data and active testing details</summary>
 
-The current supported/tested setup is macOS:
+Optional Strix use may send source, findings, or execution context to an
+external LLM provider when explicitly configured and authorized. It is not
+enabled by default. The project never uses random public websites as default
+targets.
+</details>
 
-- Node.js 18 or newer;
-- the global toolkit installed at `$HOME/security-toolkit` (or configured with
-  `SECURITY_TOOLKIT_HOME`);
-- the eight core tools installed through their official channels;
-- Docker only if you intentionally use a tool or optional Strix workflow that
-  requires it; and
-- a local disposable application only for authorized ZAP/Nuclei testing.
+## Quick start
 
-This repository does not automatically install security tools. Use the official
-installation instructions for each upstream project. A typical Homebrew setup
-for commonly available CLI packages is:
+The tested setup is macOS with Node.js 18 or newer and the global toolkit at
+`$HOME/security-toolkit` (or `SECURITY_TOOLKIT_HOME`). This repository does not
+auto-install scanners.
+
+<details>
+<summary>Install the external toolkit</summary>
+
+Use each upstream project's official installation instructions. A typical
+Homebrew setup for commonly available CLI packages is:
 
 ```bash
 brew install gitleaks trufflehog semgrep trivy osv-scanner nuclei
 brew install --cask owasp-zap
 ```
 
-Install Checkov using its official Python packaging instructions (for example,
-an isolated `pipx` environment). Confirm the actual installation with the
-global toolkit commands below; do not assume that a package-manager install
-means the scanner is healthy.
+Install Checkov using its official Python packaging instructions, such as an
+isolated `pipx` environment. Then verify the installation with `doctor`.
+</details>
 
-## Install this project
+<details>
+<summary>Install and connect this repository</summary>
 
 ```bash
-git clone <repository-url>
-cd <repository-directory>
+git clone https://github.com/DOTfei/vibe-code-guard
+cd vibe-code-guard
 npm install
 npm test
-```
-
-Install the Orchestrator modules into the global toolkit when you want the
-`security-check auto` command to use this repository's current source:
-
-```bash
 npm run install:orchestrator
 ```
 
 The installer copies only this project's JavaScript modules to
 `$SECURITY_TOOLKIT_HOME/orchestrator` (default: `$HOME/security-toolkit/orchestrator`).
 It does not install scanners, templates, databases, credentials, or binaries.
+</details>
 
-## Run the checks
-
-Run these from any project directory that you are authorized to review:
+Run the health checks once, then scan any project you are authorized to review:
 
 ```bash
 security-tools doctor
 security-tools self-test
-
 security-check quick .
-security-check full .
-security-check auto .
 ```
 
-Use `quick` during normal development. It focuses on fast source, secret, and
-dependency checks. Use `full` before release for broader static, dependency,
-secret, and infrastructure coverage; active web stages still require an
-explicit authorized localhost/test target. Use `auto` when you want the
-Orchestrator to classify the change and record why each scanner ran, skipped,
-or was not applicable.
+Use `full` before release. Use `auto` when you want the Orchestrator to explain
+why each scanner ran, skipped, or was not applicable. The release gate stays
+conservative: a quick scan, unresolved high-severity findings, tool errors, or
+skipped manual review will not be reported as ready to deploy.
 
-The release gate is deliberately conservative: a quick scan or a scan with
-unresolved high-severity findings, tool errors, or skipped manual review will
-not be reported as ready to deploy.
-
-## Start the local Dashboard
+## Local Dashboard
 
 ```bash
 npm start
@@ -164,26 +186,22 @@ Open [http://127.0.0.1:4567](http://127.0.0.1:4567). Optional configuration:
 PORT=4567
 SECURITY_TOOLKIT_HOME="$HOME/security-toolkit"
 SECURITY_DASHBOARD_DATA_DIR="$HOME/security-toolkit/runs"
-# Optional: prepend a custom directory containing scanner binaries
 SECURITY_TOOL_PATHS="$HOME/bin"
-# Optional: map allowlisted tool names to absolute binaries when not on PATH
 SECURITY_TOOL_BINARIES='{"zap":"/path/to/zap.sh"}'
 ```
 
-Run data is sanitized and stored locally. If the configured global run
-directory is not writable, development runs fall back to the repository's
-ignored `runs/` directory. Do not commit generated reports or run artifacts.
+Run data is sanitized and stored locally. If the global run directory is not
+writable, development runs fall back to the ignored `runs/` directory.
 
-## Strix is optional
+<details>
+<summary>Strix is optional</summary>
 
-Strix is registered as an optional active-testing layer, separate from the
-eight-tool core health gate. The Strix Codex skills are pinned outside this
-repository; the Strix CLI is not installed or invoked automatically.
-
-When using Strix, ask for an explicit authorized local assessment and review
-the exact target, command, Docker impact, and external LLM data flow before
-execution. Never use a third-party or public target without written
-authorization.
+Strix is separate from the eight-tool core health gate. Its CLI is not
+installed or invoked automatically. Any Strix assessment requires explicit
+authorization, a reviewed target and command, and a decision about Docker and
+external LLM data flow. Never use a public or third-party target without
+written authorization.
+</details>
 
 ## Repository layout
 
