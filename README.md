@@ -1,152 +1,190 @@
 # Vibe Code Guard
 
-**Local-first security orchestration for AI-assisted software.**
+**A local-first security orchestration layer, pipeline, and Dashboard for AI-assisted software.**
 
 `v0.1.0-alpha` · Early Alpha / Active Development · macOS tested
 
-> AI writes code fast. Security review needs to keep up.
+AI coding is fast. Security tooling is fragmented.
 
-Vibe Code Guard is the local-first safety layer for AI-assisted and
-“vibe-coded” software. It sees what changed, chooses the checks that matter,
-runs real open-source scanners locally, and explains what needs attention.
+Vibe Code Guard does not invent a new vulnerability scanning engine. It brings
+existing open-source security tools into one local, change-aware pipeline and
+Dashboard.
+
+**The scanners find the problems. Vibe Code Guard makes the security workflow
+usable.**
 
 <p align="center">
-  <img src="diagrams/vibe-code-guard-flow-next-ai-drawio.svg" alt="Animated Vibe Code Guard flow exported by Next AI Draw.io: detect changes, choose checks, scan locally, explain findings, fix, and rescan" width="1100" />
+  <img src="diagrams/vibe-code-guard-explainer-next-ai-drawio.svg" alt="Vibe Code Guard explainer: upstream open-source scanning engines feed a local change-aware pipeline, unified evidence, fix and rescan status, history, Dashboard, and release gate" width="1100" />
 </p>
 
-Animation fallback: [view the GIF version](diagrams/vibe-code-guard-overview.gif).
+Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
 
-<details>
-<summary>Open the editable architecture diagrams</summary>
+## What this project is
 
-- [Compact overview: GIF](diagrams/vibe-code-guard-overview.gif) ·
-  [Mermaid](diagrams/vibe-code-guard-overview.mmd) ·
-  [Excalidraw](diagrams/vibe-code-guard-overview.excalidraw)
-- [Detailed flow: GIF](diagrams/vibe-code-guard-flow.gif) ·
-  [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-flow-next-ai-drawio.svg) ·
-  [SVG source](diagrams/vibe-code-guard-flow-animated.svg) ·
-  [draw.io](diagrams/vibe-code-guard-flow.drawio) ·
-  [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
-  [Excalidraw](diagrams/vibe-code-guard-flow.excalidraw)
+Vibe Code Guard combines the capabilities of established open-source security
+tools into one understandable local workflow for AI-generated and
+“vibe-coded” projects.
 
-The diagrams are generated from this repository's own architecture. The
-draw.io-compatible source can be refined in tools such as
-[Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io); no upstream
-source code or service dependency is bundled here. The detailed draw.io source
-uses animated connectors (flowAnimation=1) and was checked with the upstream
-project's MCP loader/validator.
-</details>
+It is not a new scanner and it does not replace the upstream projects. It is
+the layer around them that understands project context, coordinates the checks,
+and brings scanner results, execution state, run history, and the local
+Dashboard into one workflow. A formal Unified Finding Schema, cross-tool
+correlation, persistent finding lifecycle, and automated fix/rescan workflow
+are planned milestones:
 
-## What it does now
+1. understands what changed in a repository;
+2. classifies the change and applies safe scanning policies;
+3. selects the relevant checks instead of blindly running everything every time;
+4. executes independently installed upstream tools;
+5. collects execution evidence, findings, and skip reasons; and
+6. presents the result in a local Dashboard with history and a conservative
+   release-gate summary.
 
-- **Understands the change:** deterministic Git/file inspection, risk levels,
-  mandatory policies, and applicability decisions.
-- **Runs the right checks:** quick, full, or change-aware `auto` plans using the
-  existing local security toolkit.
-- **Shows the evidence:** real scanner state, findings, skip reasons, history,
-  and a conservative release-gate summary in the local Dashboard.
-- **Keeps active testing bounded:** ZAP and Nuclei stay localhost/test-focused;
-  Strix remains optional and requires explicit approval.
+The goal is simple: install the security toolkit once, then use the same
+repeatable security workflow in every AI-assisted coding repository.
 
-It is an orchestration layer, not a new scanner. Upstream tools keep their own
-licenses and attribution; see [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+## Who does what
 
-<details>
-<summary>Which upstream tools are involved?</summary>
+| | Responsibility |
+| --- | --- |
+| **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
+| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; parses scanner output into a basic common Dashboard presentation; records execution state and run history; and provides a conservative release gate. Formal finding schema, correlation, persistent lifecycle, and automated fix/rescan are planned. |
 
-Gitleaks, TruffleHog, Semgrep, Trivy, OSV-Scanner, Checkov, OWASP ZAP, Nuclei,
-and optional Strix are invoked as independently installed upstream tools. This
-repository does not bundle their binaries, source, rules, templates, or
-databases. See [`third-party/tools.json`](third-party/tools.json) for the
-portable integration record.
-</details>
+Vibe Code Guard does not claim the upstream detection engines as its own work.
+The individual tools remain responsible for their own scanning behavior and
+licenses.
 
-## Three ways to use it
+## The problem we solve
 
-| When | Command | What it does |
+AI-assisted development makes it easy to create features quickly, but it also
+creates a practical security gap:
+
+- **Security tools are fragmented.** Each scanner has its own installation,
+  command syntax, output format, database, rules, and update process.
+- **Developers do not know which check fits the change.** A dependency change,
+  API change, secret leak, Dockerfile, and web application need different kinds
+  of review.
+- **Running every scanner on every edit is slow.** Running none of them leaves
+  blind spots.
+- **Raw findings are difficult to act on.** A list of tool-specific alerts does
+  not clearly show what ran, what was skipped, what matters, or whether a fix
+  actually remained fixed.
+- **Active testing needs a boundary.** Web scanners and agentic testing tools
+  must not accidentally target third-party systems.
+- **Toolchain health is easy to forget.** An outdated binary, missing database,
+  broken rule set, or failed self-test can make a security workflow look more
+  complete than it really is.
+
+Vibe Code Guard turns those separate concerns into one visible, local, and
+repeatable security path.
+
+## What we built
+
+### 1. A curated open-source security toolkit
+
+The core toolkit covers several independent detection layers:
+
+| Security layer | Open-source tool | What it contributes | License |
+| --- | --- | --- | --- |
+| Secrets | [Gitleaks](https://github.com/gitleaks/gitleaks) | Detects likely secrets in source and Git history | [MIT](https://raw.githubusercontent.com/gitleaks/gitleaks/master/LICENSE) |
+| Secrets | [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Searches for credentials and verifies exposed secrets where supported | [GNU AGPL v3 — see upstream LICENSE](https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE) |
+| Static analysis | [Semgrep](https://github.com/semgrep/semgrep) | Finds insecure code patterns using configurable rules | [LGPL-2.1](https://raw.githubusercontent.com/semgrep/semgrep/develop/LICENSE) |
+| Vulnerabilities and config | [Trivy](https://github.com/aquasecurity/trivy) | Scans dependencies, filesystems, containers, secrets, and configuration | [Apache-2.0](https://raw.githubusercontent.com/aquasecurity/trivy/main/LICENSE) |
+| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Matches supported dependency manifests and lockfiles to OSV vulnerabilities | [Apache-2.0](https://raw.githubusercontent.com/google/osv-scanner/main/LICENSE) |
+| Infrastructure as code | [Checkov](https://github.com/bridgecrewio/checkov) | Checks Terraform, Dockerfiles, Kubernetes, and other IaC policies | [Apache-2.0](https://raw.githubusercontent.com/bridgecrewio/checkov/main/LICENSE) |
+| Authorized web testing | [OWASP ZAP](https://github.com/zaproxy/zaproxy) | Dynamic web application testing for authorized local/test targets | [Apache-2.0](https://raw.githubusercontent.com/zaproxy/zaproxy/main/LICENSE) |
+| Authorized template detection | [Nuclei](https://github.com/projectdiscovery/nuclei) | Template-driven detection against explicitly authorized targets | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei/main/LICENSE.md) |
+| Detection content | [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates) | Community-curated detection content used by Nuclei | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/LICENSE.md) |
+| Optional agentic testing | [Strix](https://github.com/usestrix/strix) | Explicitly authorized deep testing and exploit validation | [Apache-2.0](https://raw.githubusercontent.com/usestrix/strix/main/LICENSE) |
+
+Strix is not part of the deterministic eight-tool core health gate and is
+never invoked implicitly by `quick` or `full`.
+
+This is **composition at the workflow layer**, not a combined binary or a
+fork. The repository does not copy, bundle, modify, or redistribute the
+upstream scanners, their binaries, databases, rules, templates, or add-ons.
+They are independently installed and managed through their own official
+channels. This repository does not relicense them or claim them as its own
+work.
+
+### 2. A change-aware security pipeline
+
+The pipeline separates everyday development checks from deeper pre-release
+review:
+
+```text
+repository change
+       ↓
+detect files, stack, and risk
+       ↓
+apply policy and choose relevant checks
+       ↓
+run local upstream scanners
+       ↓
+parse the current run and explain findings
+       ↓
+record execution state and run history
+       ↓
+planned: fix → regression test → targeted rescan
+       ↓
+human review and conservative release gate
+```
+
+The intended operating pattern is:
+
+| Moment | Command | Typical scope |
 | --- | --- | --- |
-| While coding | `security-check quick .` | Fast secrets, static, and dependency checks |
+| During development | `security-check quick .` | Secrets, static analysis, and dependency checks |
 | Before release | `security-check full .` | Broader code, dependency, and infrastructure checks |
-| When the change matters | `security-check auto .` | Classifies the change and explains every run/skip decision |
+| For a changed project | `security-check auto .` | Change-aware selection with an explanation for every run or skip |
 
-The local Dashboard shows the same real execution state, findings, history, and
-release-gate result in a browser. It does not expose arbitrary shell execution.
+**Full installation does not mean full scanning on every edit.** The toolkit
+can be installed once globally, while the pipeline chooses a proportionate set
+of checks for the current change.
 
-## Roadmap / Not yet complete
+### 3. A local security Dashboard
 
-This repository is intentionally not presented as a finished security product.
-The following are planning milestones, not promises:
+The Dashboard gives developers a visual audit trail instead of forcing them to
+read several unrelated terminal outputs. It shows:
 
-- **v0.1 — Security Orchestrator:** current early-alpha orchestration layer.
-- **v0.2 — Unified Findings:** richer normalized finding representation.
-- **v0.3 — Correlation + Coverage:** cross-tool correlation and coverage
-  visibility.
-- **v0.4 — AI Fix Loop:** controlled fix, regression-test, and rescan flow.
-- **v0.5 — Code Quality + Reliability:** non-security quality and reliability
-  checks.
-- **v1.0 — Stable public release:** only after broader testing and review.
+- which scanners actually ran;
+- installed tool and toolchain health;
+- findings and their evidence;
+- explicit skip and not-applicable reasons;
+- scan history and current run/rescan evidence; and
+- a conservative release-gate summary.
 
-Richer Git diff analysis, a Unified Finding Schema, Finding Correlation, a
-Security Coverage Engine, an AI fix/rescan loop, Strix deep-audit execution,
-automatic disposable runtime environments, hardened toolchain update/rollback,
-and expanded integration tests are not complete yet.
+The current Dashboard provides basic normalized presentation and history. It
+does not yet provide the formal Unified Finding Schema, cross-tool correlation,
+or a persistent finding lifecycle promised in the roadmap.
 
-## Safety by default
+The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
+require an account or cloud database, and does not upload source code or scan
+results. It observes and explains scanner execution; it does not manufacture
+findings or pretend that a skipped check passed.
 
-No scanner or combination of scanners can guarantee that software is
-vulnerability-free. This project provides checks and visibility; it is not a
-security warranty and must not be described as “100% secure” or as detecting
-all vulnerabilities.
+## How to use it
 
-The Dashboard defaults to:
+### Install the external toolkit
 
-- binding to `127.0.0.1`;
-- no project-specific telemetry or analytics;
-- no account requirement;
-- no source-code or scan-result upload by the Dashboard;
-- no cloud database requirement; and
-- local, append-only run history.
-
-External scanners may contact upstream services for vulnerability databases,
-rules, templates, or add-ons. Review their network behavior for your
-environment.
-
-ZAP, Nuclei, and Strix can perform active testing.
-Use them only against systems you own or are explicitly authorized to test.
-Automatic web behavior remains localhost-focused.
-
-<details>
-<summary>External data and active testing details</summary>
-
-Optional Strix use may send source, findings, or execution context to an
-external LLM provider when explicitly configured and authorized. It is not
-enabled by default. The project never uses random public websites as default
-targets.
-</details>
-
-## Quick start
-
-The tested setup is macOS with Node.js 18 or newer and the global toolkit at
-`$HOME/security-toolkit` (or `SECURITY_TOOLKIT_HOME`). This repository does not
-auto-install scanners.
-
-<details>
-<summary>Install the external toolkit</summary>
-
-Use each upstream project's official installation instructions. A typical
-Homebrew setup for commonly available CLI packages is:
+The repository does not silently install scanners. Use each upstream project's
+official installation instructions. A typical macOS setup for commonly
+available CLI packages is:
 
 ```bash
 brew install gitleaks trufflehog semgrep trivy osv-scanner nuclei
 brew install --cask owasp-zap
 ```
 
-Install Checkov using its official Python packaging instructions, such as an
-isolated `pipx` environment. Then verify the installation with `doctor`.
-</details>
+Install Checkov using its official Python packaging instructions, preferably in
+an isolated `pipx` environment. Then verify the toolkit:
 
-<details>
-<summary>Install and connect this repository</summary>
+```bash
+security-tools doctor
+security-tools self-test
+```
+
+### Install this orchestration layer
 
 ```bash
 git clone https://github.com/DOTfei/vibe-code-guard
@@ -156,31 +194,30 @@ npm test
 npm run install:orchestrator
 ```
 
-The installer copies only this project's JavaScript modules to
-`$SECURITY_TOOLKIT_HOME/orchestrator` (default: `$HOME/security-toolkit/orchestrator`).
-It does not install scanners, templates, databases, credentials, or binaries.
-</details>
+The installer copies only this project's orchestration modules to
+`$SECURITY_TOOLKIT_HOME/orchestrator` (default:
+`$HOME/security-toolkit/orchestrator`). It does not install scanners,
+templates, databases, credentials, or binaries.
 
-Run the health checks once, then scan any project you are authorized to review:
+Then, inside any repository you are authorized to review:
 
 ```bash
-security-tools doctor
-security-tools self-test
 security-check quick .
+# or
+security-check full .
+# or
+security-check auto .
 ```
 
-Use `full` before release. Use `auto` when you want the Orchestrator to explain
-why each scanner ran, skipped, or was not applicable. The release gate stays
-conservative: a quick scan, unresolved high-severity findings, tool errors, or
-skipped manual review will not be reported as ready to deploy.
-
-## Local Dashboard
+### Start the local Dashboard
 
 ```bash
 npm start
 ```
 
-Open [http://127.0.0.1:4567](http://127.0.0.1:4567). Optional configuration:
+Open [http://127.0.0.1:4567](http://127.0.0.1:4567).
+
+Optional configuration:
 
 ```bash
 PORT=4567
@@ -190,23 +227,135 @@ SECURITY_TOOL_PATHS="$HOME/bin"
 SECURITY_TOOL_BINARIES='{"zap":"/path/to/zap.sh"}'
 ```
 
-Run data is sanitized and stored locally. If the global run directory is not
-writable, development runs fall back to the ignored `runs/` directory.
+## Safety boundaries
 
-<details>
-<summary>Strix is optional</summary>
+No scanner or combination of scanners can guarantee that software is
+vulnerability-free. Vibe Code Guard is an early-alpha engineering aid, not a
+security warranty, certification, or substitute for qualified human review.
 
-Strix is separate from the eight-tool core health gate. Its CLI is not
-installed or invoked automatically. Any Strix assessment requires explicit
-authorization, a reviewed target and command, and a decision about Docker and
-external LLM data flow. Never use a public or third-party target without
-written authorization.
-</details>
+Active testing is restricted by design:
+
+- ZAP and Nuclei default to localhost, local Docker, or explicitly configured
+  authorized test/staging targets.
+- Strix requires an explicit decision about the target, command, Docker, and
+  any external LLM data flow.
+- Never scan a third-party system without clear authorization.
+- Never use real credentials or destructive payloads in self-tests.
+- Nuclei templates and other executable security content must come from trusted
+  sources and retain their security/signature controls.
+
+External scanners may contact upstream services for vulnerability databases,
+rules, templates, or add-ons. Review their individual network behavior and
+terms for your environment.
+
+## Licensing, attribution, and third-party terms
+
+The original orchestration, Dashboard, policy, test, and documentation code in
+this repository is licensed under the [Apache License 2.0](LICENSE).
+
+The scanners listed above remain separate works owned by their respective
+authors and organizations. Their licenses are **not** replaced by this
+repository's Apache-2.0 license. The current integration invokes independently
+installed tools through explicit adapters and allowlists; it does not link
+against or redistribute their code or binaries.
+
+The listed licenses apply to the upstream repositories themselves. Rule packs,
+templates, vulnerability databases, plugins, add-ons, model assets, and other
+downloaded artifacts may have their own terms and must be reviewed separately
+before use or redistribution.
+
+For every integrated upstream project, the repository records:
+
+- project name and official repository;
+- license identifier and upstream license URL;
+- integration boundary;
+- whether the project is bundled or modified; and
+- attribution and notice requirements.
+
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for the human-readable
+notice and license table, [`ATTRIBUTIONS.md`](ATTRIBUTIONS.md) for project
+credits, [`third-party/tools.json`](third-party/tools.json) for portable
+machine-readable metadata, and
+[`security-toolchain.lock`](security-toolchain.lock) for the tracked toolchain
+record.
+
+Important licensing boundary: TruffleHog is described here as “GNU AGPL v3 —
+see upstream LICENSE” and Semgrep as LGPL-2.1.
+If this project ever bundles, links to, modifies, embeds, packages, or
+redistributes any upstream tool, rule, template, database, add-on, or
+dependency, the licensing analysis must be repeated and the applicable notices
+must be shipped. Do not assume that a tool's repository license covers every
+artifact it downloads or uses.
+
+The README architecture diagram was exported with
+[Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io), which is an
+external documentation tool and is licensed under
+[Apache-2.0](https://raw.githubusercontent.com/DayuanJiang/next-ai-draw-io/main/LICENSE).
+Its source code, binary, and runtime are not bundled or used by the Dashboard.
+
+This documentation is a compliance record and is not legal advice. Before
+distributing a combined binary, installer, container image, hosted service, or
+commercial product, obtain a proper license and trademark review and check the
+current upstream notices. Keep upstream copyright, trademark, and license
+notices intact.
+
+## What is complete—and what is not
+
+Current early-alpha capabilities:
+
+- deterministic change detection, risk classification, policy evaluation, and
+  tool selection;
+- `quick`, `full`, and change-aware `auto` plans;
+- basic scanner output parsing and normalized Dashboard presentation;
+- scanner execution state, run history, and tool health;
+- localhost-focused active-testing boundaries; and
+- safe synthetic self-test fixtures.
+
+Planned milestones, not current promises:
+
+- **v0.2 — Unified Findings:** one normalized schema for every scanner result;
+- **v0.3 — Correlation + Lifecycle:** cross-tool deduplication and
+  open/fixed/verified/reopened tracking;
+- **v0.4 — AI Security Review:** plain-language explanation of what the
+  scanners found, including likely false positives;
+- **v0.5 — GitHub PR Review:** PR summaries and findings tied to a pull request;
+- **v0.6 — Fix → Rescan Automation:** controlled fix, regression test, and
+  targeted rescan;
+- **v0.7 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
+- **v1.0 — Stable Security Review Platform:** after broader testing, review,
+  and documentation.
+
+Vibe Code Guard's own scope remains the orchestration flow, not the scanners.
+Every roadmap item above is a workflow or presentation layer on top of
+independently maintained upstream projects.
+
+## Product explainer and implementation diagrams
+
+The first diagram is the README's main product explanation. It shows the
+division of responsibility between Vibe Code Guard and the upstream scanning
+engines, plus the workflow outputs users see.
+
+- **Main product explainer:** [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
+  [draw.io source](diagrams/vibe-code-guard-explainer.drawio) ·
+  [Mermaid](diagrams/vibe-code-guard-explainer.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-explainer.excalidraw) ·
+  [Next AI Draw.io PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png) ·
+  [Mermaid PNG render](diagrams/vibe-code-guard-explainer.png)
+
+- **Detailed implementation flow:** [GIF](diagrams/vibe-code-guard-flow.gif) ·
+  [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-flow-next-ai-drawio.svg) ·
+  [draw.io source](diagrams/vibe-code-guard-flow.drawio) ·
+  [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-flow.excalidraw)
+
+The diagrams describe this repository's own architecture. The draw.io source
+can be refined with [Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io);
+no upstream source code, binary, or runtime dependency is bundled here.
 
 ## Repository layout
 
 ```text
-orchestrator/       deterministic change, policy, risk, and tool selection
+orchestrator/       change detection, policy, risk, and tool selection
 public/             local Dashboard assets
 test/               unit tests and safe orchestration fixtures
 scripts/            installation helpers
@@ -214,21 +363,20 @@ third-party/        portable upstream integration metadata
 ```
 
 The repository intentionally does not contain scanner binaries, vulnerability
-databases, secret rules, Nuclei templates, ZAP sessions, or private project
-data.
+databases, secret rules, Nuclei templates, ZAP sessions, credentials, or
+private project data.
 
-## Contributing and reporting issues
+## Contributing and security reports
 
 See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development expectations and
 [`SECURITY.md`](SECURITY.md) for private vulnerability reporting. Please do
 not publish credentials, sensitive logs, private source, or exploit details in
 public issues.
 
-## License
+## Project license
 
-Original code in this repository is licensed under the Apache License 2.0;
-see [`LICENSE`](LICENSE). The Apache-2.0 choice applies to this project's
-original orchestration/dashboard code and provides a permissive copyright and
-patent grant suitable for an external-CLI integration layer. It does not
-relicense upstream scanners or their dependencies. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for those separate terms.
+Original code in this repository: [Apache License 2.0](LICENSE).
+
+Third-party projects and artifacts: separate upstream licenses and notices as
+described above. Vibe Code Guard does not claim authorship of, or ownership
+over, those projects.

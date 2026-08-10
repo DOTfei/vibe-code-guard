@@ -1,6 +1,6 @@
 # Contributing
 
-Security Orchestrator is an early-alpha, local-first project. Contributions
+Vibe Code Guard is an early-alpha, local-first project. Contributions
 that improve correctness, transparency, portability, and safe defaults are
 welcome.
 

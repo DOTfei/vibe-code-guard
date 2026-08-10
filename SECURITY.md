@@ -1,6 +1,6 @@
 # Security Policy
 
-Security Orchestrator is early-alpha software. It is not a vulnerability-free
+Vibe Code Guard is early-alpha software. It is not a vulnerability-free
 guarantee, and it should not be used as the sole security control for a
 production system.
 

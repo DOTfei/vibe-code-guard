@@ -20,7 +20,8 @@
     {
       "name": "TruffleHog",
       "repository": "https://github.com/trufflesecurity/trufflehog",
-      "license": "AGPL-3.0-only",
+      "license": "AGPL-3.0",
+      "license_reference": "upstream LICENSE",
       "license_url": "https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE",
       "version": "3.96.0",
       "commit": null,
@@ -114,6 +115,20 @@
       "attribution_required": true,
       "notice_required": true,
       "status": "verified-local-install"
+    },
+    {
+      "name": "Nuclei Templates",
+      "repository": "https://github.com/projectdiscovery/nuclei-templates",
+      "license": "MIT",
+      "license_url": "https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/LICENSE.md",
+      "version": null,
+      "commit": null,
+      "integration_type": "external-content",
+      "bundled": false,
+      "modified": false,
+      "attribution_required": true,
+      "notice_required": true,
+      "status": "trusted-source-only"
     },
     {
       "name": "Strix",

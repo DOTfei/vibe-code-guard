@@ -8,4 +8,4 @@ DESTINATION="$TOOLKIT_DIR/orchestrator"
 mkdir -p "$DESTINATION"
 cp "$SOURCE_ROOT"/orchestrator/*.js "$DESTINATION"/
 chmod u+x "$DESTINATION/cli.js"
-echo "Installed Security Orchestrator modules to $DESTINATION"
+echo "Installed Vibe Code Guard orchestration modules to $DESTINATION"

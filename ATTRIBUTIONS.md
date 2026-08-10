@@ -1,6 +1,6 @@
 # Attributions
 
-Security Orchestrator is built around established open-source projects. We
+Vibe Code Guard is built around established open-source projects. We
 thank their maintainers and contributors:
 
 - [Gitleaks](https://github.com/gitleaks/gitleaks) — secret detection.
@@ -17,6 +17,8 @@ thank their maintainers and contributors:
   testing.
 - [Nuclei](https://github.com/projectdiscovery/nuclei) — template-driven
   authorized detection.
+- [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates) —
+  separately maintained detection content for Nuclei.
 - [Strix](https://github.com/usestrix/strix) — optional agentic security
   testing integration.
 
@@ -29,4 +31,5 @@ source code, binaries, templates, rules, or databases. See
 [Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io) was used as an
 external diagram editing/export tool for the README architecture visualization.
 Its MCP server loaded and exported the `.drawio` source; no Next AI Draw.io
-source code, binary, or runtime dependency is bundled in this repository.
+source code, binary, or runtime dependency is bundled in this repository. The
+upstream project is licensed under [Apache-2.0](https://raw.githubusercontent.com/DayuanJiang/next-ai-draw-io/main/LICENSE).

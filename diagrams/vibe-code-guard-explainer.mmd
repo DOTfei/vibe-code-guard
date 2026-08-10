@@ -1,0 +1,26 @@
+graph LR
+  A["AI-assisted project change"] --> B
+
+  subgraph V["Vibe Code Guard"]
+    B["Understand project + change"] --> C["Choose relevant checks"]
+    C --> E["Orchestrate local pipeline"]
+    E --> F["Bring evidence together"]
+    F --> G["Findings"]
+    F --> H["Fix + rescan status"]
+    F --> I["History"]
+    F --> J["Local Dashboard"]
+    F --> K["Conservative release gate"]
+    H -. "targeted rescan" .-> C
+  end
+
+  C -. "quick / full / auto" .-> D["Upstream open-source tools<br/>actual scanning engines"]
+  D --> E
+
+  classDef input fill:#123047,stroke:#8bd3ff,color:#f7fbff,stroke-width:2px;
+  classDef guard fill:#e8f2f8,stroke:#28739c,color:#123047,stroke-width:2px;
+  classDef engine fill:#173d33,stroke:#72e0b0,color:#effff8,stroke-width:2px;
+  classDef output fill:#fff4d6,stroke:#d4972b,color:#39280b,stroke-width:2px;
+  class A input;
+  class B,C,E,F guard;
+  class D engine;
+  class G,H,I,J,K output;
