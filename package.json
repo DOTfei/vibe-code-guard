@@ -1,6 +1,6 @@
 {
   "name": "vibe-code-guard",
-  "version": "0.3.0-alpha",
+  "version": "0.4.0-alpha",
   "private": true,
   "description": "Local-first security orchestration and dashboard for AI-assisted software development.",
   "license": "Apache-2.0",
@@ -9,7 +9,8 @@
     "dev": "node server.js",
     "test": "node --test test/*.test.js",
     "orchestrator:plan": "node orchestrator/cli.js",
-    "install:orchestrator": "bash scripts/install-orchestrator.sh"
+    "install:orchestrator": "bash scripts/install-orchestrator.sh",
+    "ai-review": "node orchestrator/cli.js ai-review"
   },
   "engines": {
     "node": ">=18"

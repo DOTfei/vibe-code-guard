@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const { buildExecutionPlan } = require('./index');
+const { runAIReviewCLI } = require('./ai-review-cli');
 
 function parseArgs(argv) {
   const options = { target: '.', webTarget: null, json: false };
@@ -17,7 +18,7 @@ function parseArgs(argv) {
 
 function humanPlan(plan) {
   const lines = [
-    'Vibe Code Guard v0.3.0-alpha',
+    'Vibe Code Guard v0.4.0-alpha',
     `Target: ${plan.projectPath}`,
     `Change source: ${plan.changeSet.source}`,
     `Categories: ${plan.categories.join(', ')}`,
@@ -37,7 +38,9 @@ function humanPlan(plan) {
 }
 
 function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'ai-review') return runAIReviewCLI(argv.slice(1));
+  const options = parseArgs(argv);
   if (options.help) {
     console.log('Usage: node orchestrator/cli.js --target <project> [--web-target http://127.0.0.1:3000] [--json]');
     return 0;
@@ -48,7 +51,15 @@ function main() {
   return 0;
 }
 
-try { process.exitCode = main(); } catch (error) {
+try {
+  const result = main();
+  if (result && typeof result.then === 'function') {
+    result.then((code) => { process.exitCode = code; }).catch((error) => {
+      console.error(`Unable to build security plan: ${error.message}`);
+      process.exitCode = 1;
+    });
+  } else process.exitCode = result;
+} catch (error) {
   console.error(`Unable to build security plan: ${error.message}`);
   process.exitCode = 1;
 }

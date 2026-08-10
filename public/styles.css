@@ -236,6 +236,17 @@ code, .mono { font-family: var(--mono); font-size: 0.88em; }
 .severity-label--critical, .severity-label--high { color: var(--red); background: var(--red-soft); }.severity-label--medium { color: #8a5a19; background: var(--amber-soft); }.severity-label--low, .severity-label--info { color: var(--blue); background: var(--blue-soft); }.severity-label--unknown { color: var(--ink-soft); background: var(--paper-deep); }
 .lifecycle-label { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border-radius: 5px; font-family: var(--mono); font-size: 10px; font-weight: 800; }
 .lifecycle-label--fail { color: var(--red); background: var(--red-soft); }.lifecycle-label--warning { color: #8a5a19; background: var(--amber-soft); }.lifecycle-label--pass { color: var(--green); background: var(--green-soft); }.lifecycle-label--neutral { color: var(--ink-soft); background: var(--paper-deep); }
+
+.ai-summary-panel, .ai-review-panel { border: 1px solid #d9e0e7; background: #fbfcfd; }
+.ai-summary-actions, .ai-review-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ai-summary-content, .ai-review-copy { color: var(--ink); line-height: 1.55; }
+.ai-review-panel { margin-top: 16px; padding: 16px; border-radius: 8px; }
+.ai-review-header { margin-bottom: 10px; }
+.ai-review-header > div { display: flex; align-items: center; gap: 10px; }
+.ai-review-status { display: inline-flex; padding: 3px 7px; border-radius: 5px; font: 700 10px var(--mono); background: var(--paper-deep); color: var(--ink-soft); }
+.ai-review-status--pass { color: var(--green); background: var(--green-soft); }.ai-review-status--warning { color: #8a5a19; background: var(--amber-soft); }.ai-review-status--fail { color: var(--red); background: var(--red-soft); }
+.ai-review-copy p { margin: 8px 0; }.ai-review-empty, .ai-review-warning, .ai-review-error, .ai-privacy-notice, .ai-muted { color: var(--ink-soft); font-size: 12px; }
+.ai-review-error { color: var(--red); }.ai-review-warning { color: #8a5a19; }
 .finding-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
 .finding-section span { display: block; margin-bottom: 3px; color: var(--ink-faint); font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
 .finding-section p { margin: 0; color: var(--ink-soft); font-size: 11px; }

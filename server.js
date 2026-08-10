@@ -23,6 +23,15 @@ const {
   projectIdentity,
   reconcileFindings,
 } = require('./core/correlation');
+const {
+  AI_REVIEW_SCHEMA_VERSION,
+  buildReviewContext,
+  cachedReviewState,
+  createProvider,
+  generateFindingReview,
+  generateSummaryReview,
+  summaryContext,
+} = require('./core/ai');
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -126,6 +135,107 @@ function saveProjectIndex(index) {
     projectId: index.projectId,
     findings: index.findings,
   }, null, 2)}\n`);
+}
+
+function aiReviewStorePath(projectId) {
+  return path.join(PROJECT_INDEX_DIR, projectId, 'ai-reviews.json');
+}
+
+function readAIReviewStore(projectId) {
+  try {
+    const stored = JSON.parse(fs.readFileSync(aiReviewStorePath(projectId), 'utf8'));
+    return {
+      schemaVersion: stored.schemaVersion || AI_REVIEW_SCHEMA_VERSION,
+      projectId,
+      reviews: stored.reviews && typeof stored.reviews === 'object' ? stored.reviews : {},
+      summaries: stored.summaries && typeof stored.summaries === 'object' ? stored.summaries : {},
+    };
+  } catch {
+    return { schemaVersion: AI_REVIEW_SCHEMA_VERSION, projectId, reviews: {}, summaries: {} };
+  }
+}
+
+function saveAIReviewStore(store) {
+  const filePath = aiReviewStorePath(store.projectId);
+  ensureDirectory(path.dirname(filePath));
+  atomicWrite(filePath, `${JSON.stringify({
+    schemaVersion: AI_REVIEW_SCHEMA_VERSION,
+    projectId: store.projectId,
+    reviews: store.reviews,
+    summaries: store.summaries,
+  }, null, 2)}\n`);
+}
+
+function aiPrivacy() {
+  const provider = createProvider();
+  const external = provider.name === 'external';
+  return {
+    provider: provider.name,
+    model: provider.model,
+    externalProvider: external,
+    notice: external
+      ? 'AI review uses an external provider. Only selected redacted security context/code snippets may leave this machine.'
+      : 'AI review is local-first. No source code is uploaded while the provider is disabled or unavailable.',
+  };
+}
+
+function rawFindingsForRun(run) {
+  return [...(run.findings || []), ...(run.resolvedFindings || [])];
+}
+
+function findingReviewContext(run, finding, options = {}) {
+  return buildReviewContext({
+    finding,
+    rawFindings: rawFindingsForRun(run),
+    stack: run.stack || [],
+    lifecycleStatus: finding.status,
+    releaseGate: run.releaseGate,
+    codeSnippet: options.codeSnippet,
+    allowCodeSnippet: options.allowCodeSnippet === true,
+  });
+}
+
+function aiReviewStateForFinding(run, finding, store = readAIReviewStore(run.projectId)) {
+  const context = findingReviewContext(run, finding);
+  const state = cachedReviewState(store.reviews[finding.id], context);
+  return {
+    status: state.status,
+    findingId: finding.id,
+    inputHash: context.inputHash,
+    review: state.review || null,
+    provider: state.provider || { provider: createProvider().name, model: createProvider().model },
+    reason: state.reason || state.staleBecause || null,
+    validationErrors: state.validationErrors || [],
+    context: state.context || context.metadata,
+    cacheHit: Boolean(state.cacheHit),
+    privacy: aiPrivacy(),
+  };
+}
+
+function aiReviewSummariesForRun(run) {
+  const store = readAIReviewStore(run.projectId);
+  return Object.fromEntries((run.correlatedFindings || []).map((finding) => [finding.id, aiReviewStateForFinding(run, finding, store)]));
+}
+
+function aiSummaryContextForRun(run, mode) {
+  return summaryContext({
+    mode,
+    findings: run.correlatedFindings || [],
+    releaseGate: run.releaseGate,
+    stack: run.stack || [],
+    runId: run.id,
+    summary: run.summary,
+  });
+}
+
+function aiSummaryStatesForRun(run) {
+  const store = readAIReviewStore(run.projectId);
+  return Object.fromEntries(['RUN_SUMMARY', 'RELEASE_REVIEW'].map((mode) => {
+    const context = aiSummaryContextForRun(run, mode);
+    const previous = store.summaries[mode];
+    const state = previous && previous.inputHash === context.inputHash ? { ...previous, cacheHit: true } : previous ? { ...previous, status: 'STALE', staleBecause: 'Relevant deterministic run evidence changed.', cacheHit: false } : { status: 'NOT_GENERATED', mode, inputHash: context.inputHash };
+    return [mode, { ...state, privacy: aiPrivacy() }];
+  }));
 }
 
 function writeEvent(run, event) {
@@ -258,6 +368,8 @@ function createRun({ projectPath, mode, webTarget }) {
     observationSummary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0 },
     correlatedSummary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0, observations: 0 },
     releaseGate: { label: 'DO NOT DEPLOY', reason: 'Assessment is still running.' },
+    aiReviews: {},
+    aiSummaryReviews: {},
     processes: new Set(),
     abortRequested: false,
   };
@@ -572,6 +684,8 @@ function finishRun(run) {
   run.finishedAt = run.finishedAt || isoNow();
   finalizeFindings(run);
   updateReleaseGate(run);
+  run.aiReviews = aiReviewSummariesForRun(run);
+  run.aiSummaryReviews = aiSummaryStatesForRun(run);
   atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
   atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
   saveRun(run);
@@ -822,7 +936,7 @@ function hydrateRun(id) {
     });
     const correlatedFindings = correlation?.findings || derived.findings;
     const correlatedSummary = correlation?.summary || countCorrelatedFindings(correlatedFindings);
-    const run = {
+  const run = {
       ...metadata,
       schemaVersion: metadata.schemaVersion || SCHEMA_VERSION,
       projectId: metadata.projectId || project.id,
@@ -838,6 +952,8 @@ function hydrateRun(id) {
       processes: new Set(),
       abortRequested: false,
     };
+    run.aiReviews = aiReviewSummariesForRun(run);
+    run.aiSummaryReviews = aiSummaryStatesForRun(run);
     try {
       const lock = JSON.parse(fs.readFileSync(path.join(TOOLKIT_HOME, 'security-toolchain.lock'), 'utf8'));
       for (const [toolId, tool] of Object.entries(lock.tools || {})) if (run.tools?.[toolId] && !run.tools[toolId].version) run.tools[toolId].version = tool.version || null;
@@ -960,6 +1076,58 @@ function openEventStream(request, response, run) {
   });
 }
 
+function findCorrelatedFinding(run, findingId) {
+  return (run.correlatedFindings || []).find((finding) => finding.id === findingId) || null;
+}
+
+function storedProviderMatches(record, provider) {
+  return record?.provider?.provider === provider.name && record?.provider?.model === provider.model;
+}
+
+async function generateStoredFindingReview(run, finding, body = {}) {
+  const store = readAIReviewStore(run.projectId);
+  const context = findingReviewContext(run, finding, {
+    allowCodeSnippet: body.allowCodeSnippet === true,
+    codeSnippet: typeof body.codeSnippet === 'string' ? body.codeSnippet : '',
+  });
+  const provider = createProvider();
+  const previous = store.reviews[finding.id];
+  if (previous?.inputHash === context.inputHash && previous.status === 'READY' && storedProviderMatches(previous, provider)) {
+    return { ...previous, cacheHit: true, privacy: aiPrivacy() };
+  }
+  store.reviews[finding.id] = {
+    status: 'GENERATING',
+    findingId: finding.id,
+    inputHash: context.inputHash,
+    provider: { provider: provider.name, model: provider.model },
+    context: context.metadata,
+    updatedAt: isoNow(),
+  };
+  saveAIReviewStore(store);
+  const result = await generateFindingReview(context, { provider });
+  store.reviews[finding.id] = result;
+  saveAIReviewStore(store);
+  run.aiReviews = aiReviewSummariesForRun(run);
+  saveRun(run);
+  return { ...result, privacy: aiPrivacy() };
+}
+
+async function generateStoredSummaryReview(run, mode) {
+  const store = readAIReviewStore(run.projectId);
+  const context = aiSummaryContextForRun(run, mode);
+  const provider = createProvider();
+  const previous = store.summaries[mode];
+  if (previous?.inputHash === context.inputHash && previous.status === 'READY' && storedProviderMatches(previous, provider)) return { ...previous, cacheHit: true, privacy: aiPrivacy() };
+  store.summaries[mode] = { status: 'GENERATING', mode, inputHash: context.inputHash, provider: { provider: provider.name, model: provider.model }, updatedAt: isoNow() };
+  saveAIReviewStore(store);
+  const result = await generateSummaryReview(context, { provider });
+  store.summaries[mode] = result;
+  saveAIReviewStore(store);
+  run.aiSummaryReviews = aiSummaryStatesForRun(run);
+  saveRun(run);
+  return { ...result, privacy: aiPrivacy() };
+}
+
 const server = http.createServer(async (request, response) => {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('Referrer-Policy', 'no-referrer');
@@ -989,6 +1157,32 @@ const server = http.createServer(async (request, response) => {
       let report = '';
       try { report = fs.readFileSync(path.join(run.dir, 'security-report.md'), 'utf8'); } catch { report = 'Report is not ready yet.'; }
       return sendText(response, 200, redact(report), 'text/markdown; charset=utf-8');
+    }
+    if (request.method === 'GET' && /^\/api\/runs\/[^/]+\/findings\/[^/]+\/ai-review$/.test(pathname)) {
+      const parts = pathname.split('/');
+      const run = hydrateRun(decodeURIComponent(parts[3]));
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      const finding = findCorrelatedFinding(run, decodeURIComponent(parts[5]));
+      if (!finding) return sendJson(response, 404, { error: 'Correlated finding not found' });
+      return sendJson(response, 200, aiReviewStateForFinding(run, finding));
+    }
+    if (request.method === 'POST' && /^\/api\/runs\/[^/]+\/findings\/[^/]+\/ai-review$/.test(pathname)) {
+      const parts = pathname.split('/');
+      const run = hydrateRun(decodeURIComponent(parts[3]));
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      const finding = findCorrelatedFinding(run, decodeURIComponent(parts[5]));
+      if (!finding) return sendJson(response, 404, { error: 'Correlated finding not found' });
+      const body = await readBody(request);
+      const result = await generateStoredFindingReview(run, finding, body);
+      return sendJson(response, 200, result);
+    }
+    if (request.method === 'POST' && /^\/api\/runs\/[^/]+\/ai-review\/summary$/.test(pathname)) {
+      const parts = pathname.split('/');
+      const run = hydrateRun(decodeURIComponent(parts[3]));
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      const body = await readBody(request);
+      const mode = body.mode === 'RELEASE_REVIEW' ? 'RELEASE_REVIEW' : 'RUN_SUMMARY';
+      return sendJson(response, 200, await generateStoredSummaryReview(run, mode));
     }
     if (request.method === 'GET' && pathname.startsWith('/api/runs/')) {
       const id = pathname.split('/')[3];
@@ -1037,6 +1231,8 @@ const server = http.createServer(async (request, response) => {
       run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
       run.summary = run.correlatedSummary;
       updateReleaseGate(run);
+      run.aiReviews = aiReviewSummariesForRun(run);
+      run.aiSummaryReviews = aiSummaryStatesForRun(run);
       atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
       atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
       saveRun(run);

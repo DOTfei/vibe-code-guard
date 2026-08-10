@@ -52,6 +52,7 @@ function statusClass(status) {
   if (value === 'pass' || value === 'healthy' || value === 'verified') return 'pass';
   if (value === 'warning' || value === 'pass with warnings' || value === 'skipped' || value === 'fixed' || value === 'false_positive' || value === 'accepted_risk') return 'warning';
   if (value === 'fail' || value === 'broken' || value === 'error' || value === 'open' || value === 'reopened') return 'fail';
+  if (value === 'stale' || value === 'failed' || value === 'not_generated') return value === 'failed' ? 'fail' : 'warning';
   return 'neutral';
 }
 
@@ -175,9 +176,33 @@ function renderOverview() {
   renderPipeline(run);
   renderTools(run);
   renderOrchestration(run);
+  renderAISummary(run);
   renderActivity(run);
   const totalFindings = run ? (summary.total || 0) : 0;
   $('#nav-findings-count').textContent = run ? String(totalFindings) : '—';
+}
+
+function renderAISummary(run) {
+  const runButton = $('#run-ai-summary');
+  const releaseButton = $('#run-ai-release');
+  const status = $('#ai-summary-status');
+  const privacy = $('#ai-summary-privacy');
+  const content = $('#ai-summary-content');
+  const state = run?.aiSummaryReviews?.RUN_SUMMARY || { status: 'NOT_GENERATED' };
+  const releaseState = run?.aiSummaryReviews?.RELEASE_REVIEW || { status: 'NOT_GENERATED' };
+  runButton.disabled = !run || run.status === 'SCANNING';
+  releaseButton.disabled = !run || run.status === 'SCANNING';
+  status.className = `status-chip status-chip--${statusClass(state.status)}`;
+  status.textContent = state.status || 'NOT_GENERATED';
+  privacy.textContent = state.privacy?.notice || releaseState.privacy?.notice || 'AI review is off until an explicit provider is configured. It never changes findings or the release gate.';
+  if (state.status === 'READY' && state.summary) {
+    const blockers = (state.summary.blockers || []).map((item) => `<li>${escapeHTML(item.findingId)} — ${escapeHTML(item.reason)}</li>`).join('');
+    content.innerHTML = `<strong>${escapeHTML(state.summary.summary)}</strong>${blockers ? `<p>Blockers</p><ul>${blockers}</ul>` : ''}<p class="ai-muted">${escapeHTML((state.summary.uncertainties || []).join(' ') || 'No additional uncertainty recorded.')}</p>`;
+  } else if (state.status === 'FAILED') content.textContent = `AI review failed safely: ${state.reason || 'Provider or validation error.'}`;
+  else if (state.status === 'STALE') content.textContent = 'Previous run summary is stale because deterministic evidence changed. Generate it again explicitly.';
+  else content.textContent = 'Generate an advisory run summary or release explanation after a scan completes.';
+  runButton.textContent = state.status === 'READY' ? 'Refresh run review' : 'Review run';
+  releaseButton.textContent = releaseState.status === 'READY' ? 'Refresh release explanation' : 'Explain release decision';
 }
 
 function renderOrchestration(run) {
@@ -234,9 +259,43 @@ function renderFindings() {
       <details class="finding-observation-details"><summary>Show ${observations.length} scanner observation${observations.length === 1 ? '' : 's'}</summary><div class="finding-observations">${observations.map((observation) => `<span>${escapeHTML(observation.scanner || 'unknown')} · ${escapeHTML(observation.ruleId || 'rule')} · ${escapeHTML(observation.runId || 'run')}</span>`).join('')}</div>${rawFindings.length ? `<pre>${escapeHTML(JSON.stringify(rawFindings, null, 2))}</pre>` : '<p class="finding-raw-note">Raw Unified Findings are available in the run API for historical observations.</p>'}</details>
       <div class="finding-footer"><span>${lastEvent ? `${escapeHTML(lastEvent.event)} · ${escapeHTML(formatDate(lastEvent.timestamp))}` : 'No lifecycle history'}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
       <div class="finding-actions">${terminal ? `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>` : `<button class="button button--secondary finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FIXED" type="button">Mark as fixed</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FALSE_POSITIVE" type="button">False positive</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="ACCEPTED_RISK" type="button">Accept risk</button>`}</div>
+      ${renderAIReviewPanel(finding, run)}
     </article>`;
   }).join('');
   $$('.finding-action').forEach((button) => button.addEventListener('click', () => updateFindingStatus(button.dataset.findingId, button.dataset.actionStatus)));
+  $$('.ai-review-action').forEach((button) => button.addEventListener('click', () => generateAIReview(button.dataset.findingId)));
+}
+
+function renderAIReviewPanel(finding, run) {
+  const state = run?.aiReviews?.[finding.id] || { status: 'NOT_GENERATED', privacy: { notice: 'AI review is off until an explicit provider is configured.' } };
+  const review = state.review;
+  const status = state.status || 'NOT_GENERATED';
+  const buttonLabel = status === 'READY' ? 'Refresh AI review' : status === 'STALE' ? 'Regenerate AI review' : status === 'FAILED' ? 'Retry AI review' : 'Generate AI Review';
+  const details = review && status === 'READY'
+    ? `<div class="ai-review-copy"><p><strong>Summary</strong><br />${escapeHTML(review.summary)}</p><p><strong>Why it matters</strong><br />${escapeHTML(review.whyItMatters)}</p><p><strong>Suggested priority</strong><br />${escapeHTML(review.priority.suggested)} — ${escapeHTML(review.priority.reason)}</p><p><strong>Recommended remediation</strong><br />${escapeHTML(review.remediation.recommendedApproach)}</p><p><strong>Possible false positive</strong><br />${escapeHTML(review.falsePositiveAssessment.likelihood)} — user decision required</p><p><strong>Uncertainties</strong><br />${escapeHTML((review.uncertainties || []).join(' ') || 'None recorded.')}</p></div>`
+    : status === 'FAILED' ? `<p class="ai-review-error">AI review failed safely: ${escapeHTML(state.reason || 'Provider or validation error.')}</p>`
+      : status === 'STALE' ? '<p class="ai-review-warning">This review is stale because relevant deterministic evidence changed.</p>'
+        : '<p class="ai-review-empty">AI is advisory only and does not run automatically.</p>';
+  return `<section class="ai-review-panel" aria-label="AI Security Review"><div class="ai-review-header"><div><span class="eyebrow">AI Security Review</span><span class="ai-review-status ai-review-status--${statusClass(status)}">${escapeHTML(status)}</span></div><button class="button button--ghost ai-review-action" data-finding-id="${escapeHTML(finding.id)}" type="button" ${status === 'GENERATING' ? 'disabled' : ''}>${buttonLabel}</button></div>${details}<p class="ai-privacy-notice">${escapeHTML(state.privacy?.notice || 'Selected redacted context only; no automatic source upload.')}</p></section>`;
+}
+
+async function generateAIReview(findingId) {
+  try {
+    if (!currentRunId) throw new Error('Select a completed run first.');
+    await requestJSON(`/api/runs/${encodeURIComponent(currentRunId)}/findings/${encodeURIComponent(findingId)}/ai-review`, { method: 'POST', body: JSON.stringify({}) });
+    await refreshState({ keepSelection: true });
+    setView('findings');
+    showToast('AI review completed or safely reported its provider state.');
+  } catch (error) { showToast(error.message); }
+}
+
+async function runAISummary(mode) {
+  try {
+    if (!currentRunId) throw new Error('Select a completed run first.');
+    await requestJSON(`/api/runs/${encodeURIComponent(currentRunId)}/ai-review/summary`, { method: 'POST', body: JSON.stringify({ mode }) });
+    await refreshState({ keepSelection: true });
+    showToast('AI summary completed or safely reported its provider state.');
+  } catch (error) { showToast(error.message); }
 }
 
 async function updateFindingStatus(findingId, status) {
@@ -412,6 +471,8 @@ function wireEvents() {
   $('#close-report').addEventListener('click', () => $('#report-dialog').close());
   $('#run-doctor').addEventListener('click', runDoctor);
   $('#run-self-test').addEventListener('click', runSelfTest);
+  $('#run-ai-summary').addEventListener('click', () => runAISummary('RUN_SUMMARY'));
+  $('#run-ai-release').addEventListener('click', () => runAISummary('RELEASE_REVIEW'));
   $$('.filter-tab').forEach((tab) => tab.addEventListener('click', () => { findingFilter = tab.dataset.severity; renderFindings(); }));
 }
 

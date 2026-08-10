@@ -2,7 +2,7 @@
 
 **A local-first security orchestration layer, pipeline, and Dashboard for AI-assisted software.**
 
-`v0.3.0-alpha` · Early Alpha / Active Development · macOS tested
+`v0.4.0-alpha` · Early Alpha / Active Development · macOS tested
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -166,7 +166,10 @@ contracts and compatibility rules.
 The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
 require an account or cloud database, and does not upload source code or scan
 results. It observes and explains scanner execution; it does not manufacture
-findings or pretend that a skipped check passed.
+findings or pretend that a skipped check passed. v0.4 adds an optional,
+explicitly triggered AI Security Review that explains selected redacted
+Correlated Finding context; it remains advisory and cannot change deterministic
+security state. See [AI Security Review documentation](docs/ai-security-review.md).
 
 ## How to use it
 
@@ -230,6 +233,19 @@ SECURITY_TOOLKIT_HOME="$HOME/security-toolkit"
 SECURITY_DASHBOARD_DATA_DIR="$HOME/security-toolkit/runs"
 SECURITY_TOOL_PATHS="$HOME/bin"
 SECURITY_TOOL_BINARIES='{"zap":"/path/to/zap.sh"}'
+```
+
+AI review is disabled by default. For a deterministic local demonstration only,
+enable the synthetic provider explicitly:
+
+```bash
+SECURITY_AI_PROVIDER=mock npm start
+```
+
+The safe CLI equivalent for reviewing an existing local run is:
+
+```bash
+npm run ai-review -- --run-dir "$SECURITY_DASHBOARD_DATA_DIR/<run-id>" --finding VCG-CORR-...
 ```
 
 ## Safety boundaries
@@ -320,6 +336,8 @@ Current early-alpha capabilities:
   `ACCEPTED_RISK` lifecycle states;
 - localhost-focused active-testing boundaries; and
 - safe synthetic self-test fixtures.
+- advisory AI Security Review with provider abstraction, bounded redacted
+  context, schema validation, local caching, and stale-review detection.
 
 Planned milestones, not current promises:
 
@@ -327,7 +345,7 @@ Planned milestones, not current promises:
 - **v0.3 — Correlation + Lifecycle:** cross-tool deduplication and
   open/fixed/verified/reopened tracking ✅;
 - **v0.4 — AI Security Review:** plain-language explanation of what the
-  scanners found, including likely false positives;
+  scanners found, including likely false positives ✅;
 - **v0.5 — GitHub PR Review:** PR summaries and findings tied to a pull request;
 - **v0.6 — Fix → Rescan Automation:** controlled fix, regression test, and
   targeted rescan;
