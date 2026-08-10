@@ -14,7 +14,7 @@ function stableStringify(value) {
   return JSON.stringify(stableValue(value));
 }
 
-function buildReviewContext({ finding, rawFindings = [], stack = [], lifecycleStatus, releaseGate = {}, codeSnippet = '', allowCodeSnippet = false } = {}) {
+function buildReviewContext({ finding, rawFindings = [], stack = [], lifecycleStatus, releaseGate = {}, codeSnippet = '', codeFile = '', allowCodeSnippet = false } = {}) {
   if (!finding?.id) throw new Error('A correlated finding is required for AI review.');
   const observations = (finding.observations || []).slice(0, MAX_OBSERVATIONS).map(safeObservation);
   const matchingRawFindings = rawFindings
@@ -28,7 +28,9 @@ function buildReviewContext({ finding, rawFindings = [], stack = [], lifecycleSt
   ].filter(Boolean))].slice(0, 20);
   const scanners = [...new Set(observations.map((observation) => observation.scanner).filter(Boolean))];
   const vulnerabilityIds = [...new Set(observations.map((observation) => observation.identity.vulnerabilityId).filter(Boolean))];
+  const requestedCodeFile = codeFile ? String(codeFile).slice(0, 500) : '';
   const snippetIncluded = Boolean(allowCodeSnippet && codeSnippet);
+  if (snippetIncluded && (!requestedCodeFile || !filePaths.includes(requestedCodeFile))) throw new Error('Code snippets must be explicitly tied to a file reported by the finding.');
   const context = {
     finding: {
       id: finding.id,
@@ -48,6 +50,7 @@ function buildReviewContext({ finding, rawFindings = [], stack = [], lifecycleSt
       reason: String(releaseGate.reason || '').slice(0, 1000),
     },
     codeSnippet: snippetIncluded ? truncate(redactValue(codeSnippet)) : null,
+    codeSnippetFile: snippetIncluded ? requestedCodeFile : null,
     evidenceBoundary: { scanners, filePaths, vulnerabilityIds },
   };
   const input = stableStringify(context);

@@ -169,6 +169,12 @@ function saveAIReviewStore(store) {
 function aiPrivacy() {
   const provider = createProvider();
   const external = provider.name === 'external';
+  if (provider.name === 'mock') return {
+    provider: provider.name,
+    model: provider.model,
+    externalProvider: false,
+    notice: 'Mock / Test provider. Output is synthetic advisory text, not security evidence or a real AI assessment.',
+  };
   return {
     provider: provider.name,
     model: provider.model,
@@ -191,6 +197,7 @@ function findingReviewContext(run, finding, options = {}) {
     lifecycleStatus: finding.status,
     releaseGate: run.releaseGate,
     codeSnippet: options.codeSnippet,
+    codeFile: options.codeFile,
     allowCodeSnippet: options.allowCodeSnippet === true,
   });
 }
@@ -899,7 +906,7 @@ async function runAudit(run) {
 function readRuns() {
   const result = [];
   for (const entry of fs.readdirSync(DATA_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
     try {
       const metadata = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'metadata.json'), 'utf8'));
       result.push(metadata);
@@ -911,7 +918,17 @@ function readRuns() {
 function hydrateRun(id) {
   if (!isValidRunId(id)) return null;
   if (runs.has(id)) return runs.get(id);
-  const dir = path.join(DATA_DIR, id);
+  let dir;
+  try {
+    const root = fs.realpathSync(DATA_DIR);
+    const candidate = path.join(DATA_DIR, id);
+    const stat = fs.lstatSync(candidate);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) return null;
+    dir = fs.realpathSync(candidate);
+    if (path.dirname(dir) !== root) return null;
+  } catch {
+    return null;
+  }
   try {
     const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'));
     const rawFindings = JSON.parse(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'));
@@ -1089,6 +1106,7 @@ async function generateStoredFindingReview(run, finding, body = {}) {
   const context = findingReviewContext(run, finding, {
     allowCodeSnippet: body.allowCodeSnippet === true,
     codeSnippet: typeof body.codeSnippet === 'string' ? body.codeSnippet : '',
+    codeFile: typeof body.codeFile === 'string' ? body.codeFile : '',
   });
   const provider = createProvider();
   const previous = store.reviews[finding.id];
@@ -1173,8 +1191,13 @@ const server = http.createServer(async (request, response) => {
       const finding = findCorrelatedFinding(run, decodeURIComponent(parts[5]));
       if (!finding) return sendJson(response, 404, { error: 'Correlated finding not found' });
       const body = await readBody(request);
-      const result = await generateStoredFindingReview(run, finding, body);
-      return sendJson(response, 200, result);
+      try {
+        const result = await generateStoredFindingReview(run, finding, body);
+        return sendJson(response, 200, result);
+      } catch (error) {
+        if (/Code snippets must be explicitly tied/.test(error.message)) return sendJson(response, 400, { error: redact(error.message) });
+        throw error;
+      }
     }
     if (request.method === 'POST' && /^\/api\/runs\/[^/]+\/ai-review\/summary$/.test(pathname)) {
       const parts = pathname.split('/');

@@ -27,7 +27,12 @@ function unavailableRecord(context, provider, status, reason) {
 }
 
 async function generateFindingReview(context, { provider = createProvider(), timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
-  const availability = await withTimeout(provider.availability(), timeoutMs);
+  let availability;
+  try {
+    availability = await withTimeout(provider.availability(), timeoutMs);
+  } catch (error) {
+    return unavailableRecord(context, provider, 'FAILED', error.message || 'AI provider availability check failed.');
+  }
   if (!availability.available) return unavailableRecord(context, provider, provider.name === 'disabled' ? 'NOT_GENERATED' : 'FAILED', availability.reason);
   try {
     const raw = await withTimeout(provider.reviewFinding(context), timeoutMs);

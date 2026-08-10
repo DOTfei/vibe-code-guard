@@ -3,7 +3,10 @@ const { validateAISummary } = require('./validation');
 const { AI_REVIEW_SCHEMA_VERSION } = require('./review-schema');
 
 async function generateSummaryReview(context, { provider = createProvider(), timeoutMs = 8000 } = {}) {
-  const availability = await Promise.resolve(provider.availability());
+  const availability = await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`AI provider timed out after ${timeoutMs}ms.`)), timeoutMs);
+    Promise.resolve(provider.availability()).then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+  }).catch((error) => ({ available: false, reason: error.message }));
   if (!availability.available) return { status: provider.name === 'disabled' ? 'NOT_GENERATED' : 'FAILED', mode: context.mode, inputHash: context.inputHash, provider: { provider: provider.name, model: provider.model }, reason: availability.reason, updatedAt: new Date().toISOString() };
   try {
     const raw = await new Promise((resolve, reject) => {

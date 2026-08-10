@@ -135,7 +135,8 @@ The equivalent safe local CLI command is:
 ```bash
 npm run ai-review -- \
   --run-dir "$SECURITY_DASHBOARD_DATA_DIR/<run-id>" \
-  --finding VCG-CORR-...
+  --finding VCG-CORR-... \
+  --allow-code-snippet --code-file package-lock.json --code-snippet '...'
 ```
 
 The command reads an existing local run and never executes arbitrary shell

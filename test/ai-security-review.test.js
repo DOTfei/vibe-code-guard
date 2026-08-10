@@ -93,7 +93,7 @@ test('hallucinated scanner, file, and CVE references are rejected', async () => 
 
 test('redaction and context limits remove secrets before provider input', () => {
   const secret = ['ghp_', '1234567890abcdef1234567890'].join('');
-  const context = fixtureContext({ allowCodeSnippet: true, codeSnippet: `const token = '${secret}';` });
+  const context = fixtureContext({ allowCodeSnippet: true, codeFile: 'package-lock.json', codeSnippet: `const token = '${secret}';` });
   assert.equal(context.codeSnippet.includes(secret), false);
   assert.match(context.codeSnippet, /REDACTED/);
   assert.ok(context.metadata.redactionCount >= 1);
@@ -106,6 +106,16 @@ test('identical evidence is a cache hit and changed evidence becomes STALE', () 
   assert.equal(cachedReviewState(ready, context).cacheHit, true);
   const changed = fixtureContext({ stack: ['Node.js', 'Next.js'] });
   assert.equal(cachedReviewState(ready, changed).status, 'STALE');
+});
+
+test('scanner evidence, explicitly supplied snippets, and lifecycle changes invalidate the cache', () => {
+  const context = fixtureContext();
+  const ready = { status: 'READY', findingId: context.finding.id, inputHash: context.inputHash, provider: { provider: 'mock', model: 'synthetic-v0.4' } };
+  const changedFinding = fixtureFinding();
+  changedFinding.observations[0].fingerprint = 'changed-fingerprint';
+  assert.equal(cachedReviewState(ready, fixtureContext({ finding: changedFinding })).status, 'STALE');
+  assert.equal(cachedReviewState(ready, fixtureContext({ allowCodeSnippet: true, codeFile: 'package-lock.json', codeSnippet: 'const version = 2;' })).status, 'STALE');
+  assert.equal(cachedReviewState(ready, fixtureContext({ lifecycleStatus: 'FIXED' })).status, 'STALE');
 });
 
 test('AI cannot automatically change lifecycle or release-gate state', async () => {
@@ -148,4 +158,26 @@ test('prompt explicitly keeps AI defensive and advisory', () => {
   assert.match(AI_REVIEW_SYSTEM_PROMPT, /scanner evidence.*authoritative/i);
   assert.match(AI_REVIEW_SYSTEM_PROMPT, /Do not generate exploit payloads/i);
   assert.match(AI_REVIEW_SYSTEM_PROMPT, /100% security/i);
+});
+
+test('code snippets require an explicitly reported file and provider output limits are bounded', async () => {
+  assert.throws(() => fixtureContext({ allowCodeSnippet: true, codeFile: '../outside.js', codeSnippet: 'safe snippet' }), /explicitly tied/);
+  const provider = { name: 'fake', model: 'large', availability: async () => ({ available: true }), reviewFinding: async () => 'x'.repeat(128 * 1024 + 1) };
+  const result = await generateFindingReview(fixtureContext(), { provider });
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.validationErrors[0], /bounded response size/);
+});
+
+test('dangerous prototype keys and provider timeouts fail closed', async () => {
+  const context = fixtureContext();
+  const output = JSON.parse(JSON.stringify(await new MockProvider().reviewFinding(context)));
+  output.__proto__ = { polluted: true };
+  const polluted = validateAIReview(JSON.parse(`{"__proto__":{"polluted":true},"schemaVersion":"1.0"}`), context);
+  assert.equal(polluted.valid, false);
+  const provider = { name: 'fake', model: 'timeout', availability: () => new Promise(() => {}) };
+  const result = await generateFindingReview(context, { provider, timeoutMs: 5 });
+  assert.equal(result.status, 'FAILED');
+  assert.match(result.reason, /timed out/);
+  assert.equal({}.polluted, undefined);
+  assert.equal(output.findingId, context.finding.id);
 });
