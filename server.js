@@ -524,8 +524,13 @@ function safeWebTarget(input) {
     const parsed = new URL(input);
     if (parsed.protocol !== 'http:') return null;
     const allowed = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
-    const configured = String(process.env.SECURITY_AUTHORIZED_TARGETS || '').split(',').map((item) => item.trim()).filter(Boolean);
-    return allowed.has(parsed.hostname) || configured.includes(input) ? parsed.toString().replace(/\/$/, '') : null;
+    const configured = [process.env.SECURITY_AUTHORIZED_TARGETS, process.env.VIBE_CODE_GUARD_AUTHORIZED_TARGETS]
+      .flatMap((value) => String(value || '').split(','))
+      .map((item) => item.trim())
+      .map((item) => item.replace(/\/$/, ''))
+      .filter(Boolean);
+    const normalized = parsed.toString().replace(/\/$/, '');
+    return allowed.has(parsed.hostname) || configured.includes(normalized) ? normalized : null;
   } catch {
     return null;
   }
@@ -1275,7 +1280,11 @@ const server = http.createServer(async (request, response) => {
   }
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`Local Security Dashboard listening on http://${HOST}:${PORT}`);
-  console.log(`Run data directory: ${DATA_DIR}`);
-});
+if (require.main === module) {
+  server.listen(PORT, HOST, () => {
+    console.log(`Local Security Dashboard listening on http://${HOST}:${PORT}`);
+    console.log(`Run data directory: ${DATA_DIR}`);
+  });
+}
+
+module.exports = { server, createRun, runAudit, hydrateRun, readRuns, safeProjectPath, safeWebTarget, detectStack };

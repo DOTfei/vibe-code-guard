@@ -1,8 +1,8 @@
 # Vibe Code Guard
 
-**A local-first security orchestration layer, pipeline, and Dashboard for AI-assisted software.**
+**A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
 
-`v0.4.0-alpha` · Early Alpha / Active Development · macOS tested
+`v0.5.0-alpha` · Early Alpha / Active Development · macOS tested
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -18,6 +18,25 @@ usable.**
 </p>
 
 Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
+
+## Using Codex / Claude Code?
+
+Give your coding agent this repository and say:
+
+```text
+Install and use Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard,
+then security audit this project.
+```
+
+The agent handles installation, toolchain checks, project discovery, the
+appropriate audit profile, structured findings, explanations, and Dashboard
+access. You do not need to learn eight scanner commands. The scanners remain
+independently installed upstream tools; Vibe Code Guard supplies the safe
+workflow around them.
+
+See [`AGENTS.md`](AGENTS.md) and
+[`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
+agent workflow and JSON contracts.
 
 ## What this project is
 
@@ -136,9 +155,9 @@ The intended operating pattern is:
 
 | Moment | Command | Typical scope |
 | --- | --- | --- |
-| During development | `security-check quick .` | Secrets, static analysis, and dependency checks |
-| Before release | `security-check full .` | Broader code, dependency, and infrastructure checks |
-| For a changed project | `security-check auto .` | Change-aware selection with an explanation for every run or skip |
+| During development | `vibe-code-guard audit . --profile quick` | Secrets, static analysis, and dependency checks |
+| Before release | `vibe-code-guard audit . --profile release` | Broader code, dependency, infrastructure, and authorized runtime checks |
+| For a changed project | `vibe-code-guard audit . --profile auto` | Change-aware selection with an explanation for every run or skip |
 
 **Full installation does not mean full scanning on every edit.** The toolkit
 can be installed once globally, while the pipeline chooses a proportionate set
@@ -173,48 +192,39 @@ security state. See [AI Security Review documentation](docs/ai-security-review.m
 
 ## How to use it
 
-### Install the external toolkit
-
-The repository does not silently install scanners. Use each upstream project's
-official installation instructions. A typical macOS setup for commonly
-available CLI packages is:
-
-```bash
-brew install gitleaks trufflehog semgrep trivy osv-scanner nuclei
-brew install --cask owasp-zap
-```
-
-Install Checkov using its official Python packaging instructions, preferably in
-an isolated `pipx` environment. Then verify the toolkit:
-
-```bash
-security-tools doctor
-security-tools self-test
-```
-
-### Install this orchestration layer
+### Install with one safe entrypoint
 
 ```bash
 git clone https://github.com/DOTfei/vibe-code-guard
 cd vibe-code-guard
 npm install
 npm test
-npm run install:orchestrator
+./install.sh --dry-run
+./install.sh --yes
 ```
 
-The installer copies only this project's orchestration modules to
-`$SECURITY_TOOLKIT_HOME/orchestrator` (default:
-`$HOME/security-toolkit/orchestrator`). It does not install scanners,
-templates, databases, credentials, or binaries.
+The installer checks existing independently installed scanners, plans missing
+supported dependencies through official channels, preserves healthy tools, and
+never changes shell startup files or disables operating-system security
+controls. It does not bundle or relicense scanners.
 
-Then, inside any repository you are authorized to review:
+Then verify and audit the authorized project:
 
 ```bash
-security-check quick .
-# or
-security-check full .
-# or
-security-check auto .
+vibe-code-guard doctor --json
+vibe-code-guard audit . --profile auto --json
+vibe-code-guard dashboard --json
+```
+
+Use `quick`, `full`, or `release` when the agent or human needs an explicit
+profile. See [`docs/installation.md`](docs/installation.md) for manual
+fallback, status states, update, and uninstall behavior.
+
+The existing global health commands remain available:
+
+```bash
+security-tools doctor
+security-tools self-test --json
 ```
 
 ### Start the local Dashboard
@@ -335,9 +345,13 @@ Current early-alpha capabilities:
   explicit `OPEN` / `FIXED` / `VERIFIED` / `REOPENED` / `FALSE_POSITIVE` /
   `ACCEPTED_RISK` lifecycle states;
 - localhost-focused active-testing boundaries; and
-- safe synthetic self-test fixtures.
+- safe synthetic self-test fixtures;
 - advisory AI Security Review with provider abstraction, bounded redacted
-  context, schema validation, local caching, and stale-review detection.
+  context, schema validation, local caching, and stale-review detection; it is
+  optional and disabled by default; and
+- agent-readable `AGENTS.md` / `CLAUDE.md` instructions, toolchain manifest,
+  safe bootstrap states, structured doctor/audit output, project config,
+  localhost Dashboard launch, and Vibe Code Guard-only update/uninstall paths.
 
 Planned milestones, not current promises:
 
@@ -346,10 +360,11 @@ Planned milestones, not current promises:
   open/fixed/verified/reopened tracking ✅;
 - **v0.4 — AI Security Review:** plain-language explanation of what the
   scanners found, including likely false positives ✅;
-- **v0.5 — GitHub PR Review:** PR summaries and findings tied to a pull request;
-- **v0.6 — Fix → Rescan Automation:** controlled fix, regression test, and
-  targeted rescan;
-- **v0.7 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
+- **v0.5 — Agent Integration:** Codex/Claude Code instructions, safe bootstrap,
+  canonical audit, structured contracts, and manual fallback ✅;
+- **v0.6 — Dashboard UX / Local App:** further local usability and packaging;
+- **v0.7 — Real-world Project Testing:** broader compatibility validation;
+- **v0.8 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
 - **v1.0 — Stable Security Review Platform:** after broader testing, review,
   and documentation.
 
@@ -383,12 +398,15 @@ no upstream source code, binary, or runtime dependency is bundled here.
 ## Repository layout
 
 ```text
+bin/                agent-facing vibe-code-guard and security-check commands
+config/             repository-controlled toolchain manifest
 orchestrator/       change detection, policy, risk, and tool selection
 core/findings/      Unified Finding schema, sanitization, fingerprints, adapters
+core/agent/         installer, doctor, config, and structured agent contracts
 public/             local Dashboard assets
-docs/               schema and implementation documentation
+docs/               schema, installation, and agent integration documentation
 test/               unit tests and safe orchestration fixtures
-scripts/            installation helpers
+scripts/            compatibility installation helpers
 third-party/        portable upstream integration metadata
 ```
 
