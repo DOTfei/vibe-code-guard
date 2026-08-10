@@ -123,6 +123,13 @@
               <div class="orchestration-explanation" id="orchestration-explanation"></div>
             </section>
 
+            <section class="ai-summary-panel panel" aria-live="polite">
+              <div class="panel-header"><div><p class="eyebrow">Advisory layer</p><h3>AI Security Review</h3></div><span class="status-chip status-chip--neutral" id="ai-summary-status">NOT_GENERATED</span></div>
+              <p class="ai-privacy-notice" id="ai-summary-privacy">AI review is off until an explicit provider is configured. It never changes findings or the release gate.</p>
+              <div class="ai-summary-actions"><button class="button button--secondary" id="run-ai-summary" type="button" disabled>Review run</button><button class="button button--ghost" id="run-ai-release" type="button" disabled>Explain release decision</button></div>
+              <div class="ai-summary-content" id="ai-summary-content">Generate an advisory run summary or release explanation after a scan completes.</div>
+            </section>
+
             <section class="section-block pipeline-block">
               <div class="section-heading">
                 <div><p class="eyebrow">The run ledger</p><h3>Security pipeline</h3></div>
