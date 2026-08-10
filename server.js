@@ -15,6 +15,14 @@ const {
   parseJsonLoose,
   redact,
 } = require('./core/findings');
+const {
+  CORRELATION_SCHEMA_VERSION,
+  countBlockingCorrelatedFindings,
+  countCorrelatedFindings,
+  explicitLifecycleAction,
+  projectIdentity,
+  reconcileFindings,
+} = require('./core/correlation');
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -78,6 +86,7 @@ const DATA_DIR = writableDirectory(
   process.env.SECURITY_DASHBOARD_DATA_DIR || path.join(TOOLKIT_HOME, 'runs'),
   path.join(ROOT, 'runs'),
 );
+const PROJECT_INDEX_DIR = ensureDirectory(path.join(DATA_DIR, 'projects'));
 
 const runs = new Map();
 const subscribers = new Map();
@@ -90,6 +99,33 @@ function atomicWrite(filePath, value) {
   const temporary = `${filePath}.${process.pid}.tmp`;
   fs.writeFileSync(temporary, value, 'utf8');
   fs.renameSync(temporary, filePath);
+}
+
+function projectIndexPath(projectId) {
+  return path.join(PROJECT_INDEX_DIR, projectId, 'findings-index.json');
+}
+
+function readProjectIndex(projectId) {
+  try {
+    const index = JSON.parse(fs.readFileSync(projectIndexPath(projectId), 'utf8'));
+    return {
+      schemaVersion: index.schemaVersion || CORRELATION_SCHEMA_VERSION,
+      projectId,
+      findings: Array.isArray(index.findings) ? index.findings : [],
+    };
+  } catch {
+    return { schemaVersion: CORRELATION_SCHEMA_VERSION, projectId, findings: [] };
+  }
+}
+
+function saveProjectIndex(index) {
+  const filePath = projectIndexPath(index.projectId);
+  ensureDirectory(path.dirname(filePath));
+  atomicWrite(filePath, `${JSON.stringify({
+    schemaVersion: CORRELATION_SCHEMA_VERSION,
+    projectId: index.projectId,
+    findings: index.findings,
+  }, null, 2)}\n`);
 }
 
 function writeEvent(run, event) {
@@ -123,11 +159,22 @@ function saveRun(run) {
     stack: run.stack,
     orchestration: run.orchestration || null,
     summary: run.summary,
+    observationSummary: run.observationSummary || countFindings(run.findings),
+    projectId: run.projectId,
+    correlationSchemaVersion: CORRELATION_SCHEMA_VERSION,
+    correlatedSummary: run.correlatedSummary || countCorrelatedFindings(run.correlatedFindings),
     releaseGate: run.releaseGate,
     dataDir: DATA_DIR,
   };
   atomicWrite(path.join(run.dir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`);
   atomicWrite(path.join(run.dir, 'findings.json'), `${JSON.stringify(persistedFindings, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'correlation.json'), `${JSON.stringify({
+    schemaVersion: CORRELATION_SCHEMA_VERSION,
+    projectId: run.projectId,
+    findings: run.correlatedFindings || [],
+    suggestions: run.correlationSuggestions || [],
+    summary: run.correlatedSummary || countCorrelatedFindings(run.correlatedFindings),
+  }, null, 2)}\n`);
   atomicWrite(path.join(run.dir, 'tool-status.json'), `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, tools: run.tools }, null, 2)}\n`);
   atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
 }
@@ -173,6 +220,7 @@ function createRun({ projectPath, mode, webTarget }) {
   const id = `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex')}`;
   const dir = ensureDirectory(path.join(DATA_DIR, id));
   const tools = createTools();
+  const project = projectIdentity(projectPath);
   try {
     const lock = JSON.parse(fs.readFileSync(path.join(TOOLKIT_HOME, 'security-toolchain.lock'), 'utf8'));
     for (const [toolId, tool] of Object.entries(lock.tools || {})) if (tools[toolId]) tools[toolId].version = tool.version || null;
@@ -187,6 +235,7 @@ function createRun({ projectPath, mode, webTarget }) {
   }
   const run = {
     id,
+    projectId: project.id,
     dir,
     projectPath,
     projectName: path.basename(projectPath) || projectPath,
@@ -202,8 +251,12 @@ function createRun({ projectPath, mode, webTarget }) {
     stack: [],
     findings: [],
     resolvedFindings: [],
+    correlatedFindings: [],
+    correlationSuggestions: [],
     events: [],
     summary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0 },
+    observationSummary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0 },
+    correlatedSummary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0, observations: 0 },
     releaseGate: { label: 'DO NOT DEPLOY', reason: 'Assessment is still running.' },
     processes: new Set(),
     abortRequested: false,
@@ -430,31 +483,28 @@ function finalizeFindings(run) {
     if (!unique.has(finding.id)) unique.set(finding.id, finding);
   }
   run.findings = [...unique.values()];
-  const currentIds = new Set(run.findings.map((finding) => finding.id));
-  const previous = readPreviousFindings(run.projectPath, run.id);
-  const previousById = new Map(previous.map((finding) => [finding.id, finding]));
-  for (const finding of run.findings) {
-    finding.lastSeen = run.finishedAt || finding.lastSeen;
-    const old = previousById.get(finding.id);
-    if (old) {
-      finding.firstSeen = old.firstSeen || finding.firstSeen;
-    }
-  }
-  for (const old of previousById.values()) {
-    if (!currentIds.has(old.id) && old.status !== 'VERIFIED') {
-      run.resolvedFindings.push({
-        ...old,
-        status: 'VERIFIED',
-        lastSeen: run.finishedAt || isoNow(),
-        source: { ...old.source, runId: old.source?.runId || run.id },
-      });
-    }
-  }
-  run.summary = countFindings(run.findings);
+  const index = readProjectIndex(run.projectId);
+  const result = reconcileFindings(index.findings, run.findings, {
+    projectId: run.projectId,
+    projectPath: run.projectPath,
+    runId: run.id,
+    startedAt: run.startedAt,
+    observedAt: run.finishedAt || isoNow(),
+    tools: run.tools,
+    stages: run.stages,
+    webTarget: run.webTarget,
+  });
+  index.findings = result.findings;
+  saveProjectIndex(index);
+  run.correlatedFindings = index.findings;
+  run.correlationSuggestions = result.suggestions;
+  run.observationSummary = countFindings(run.findings);
+  run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
+  run.summary = run.correlatedSummary;
 }
 
 function buildReport(run) {
-  const all = [...run.findings, ...run.resolvedFindings];
+  const all = run.correlatedFindings || [];
   const overallRisk = run.summary.critical || run.summary.high
     ? 'HIGH'
     : run.summary.medium
@@ -473,10 +523,13 @@ function buildReport(run) {
     `- Path: ${redact(run.projectPath)}`,
     `- Date: ${run.startedAt}`,
     `- Unified Finding Schema: ${SCHEMA_VERSION}`,
+    `- Correlation Schema: ${CORRELATION_SCHEMA_VERSION}`,
     `- Scan Mode: ${run.mode}`,
     `- Stack: ${run.stack.join(', ') || 'Unknown'}`,
     `- Overall Risk: ${overallRisk}`,
     `- Release Decision: ${run.releaseGate.label}`,
+    `- Correlated Findings: ${run.summary.total}`,
+    `- Scanner Observations: ${run.observationSummary?.total || 0}`,
     '', '## Scanner Status', '',
     '| Tool | Status | Findings | Exit code |', '| --- | --- | ---: | ---: |',
   ];
@@ -485,37 +538,40 @@ function buildReport(run) {
   if (!all.length) lines.push('No findings were parsed from the scanners that ran.', '');
   for (const finding of all) {
     lines.push(`### ${finding.id} — ${finding.severity}`, '',
-      `- Scanner: ${finding.scanner.name}`,
+      `- Detected by: ${(finding.observations || []).map((observation) => observation.scanner).join(', ') || 'No scanner observation'}`,
       `- Category: ${finding.category}`,
-      `- Location: ${finding.location.file || finding.location.endpoint || 'Not specified'}`,
+      `- Location: ${finding.location?.file || finding.location?.endpoint || 'Not specified'}`,
       `- Title: ${finding.title}`,
-      `- Technical explanation: ${finding.explanation.technical}`,
-      `- Simple explanation: ${finding.explanation.simple}`,
-      `- Why it matters: ${finding.explanation.whyItMatters}`,
-      `- Evidence: ${finding.evidence.summary}`,
-      `- Remediation: ${finding.remediation.summary || 'Review and document the appropriate fix.'}`,
+      `- Observations: ${(finding.observations || []).length}`,
       `- Status: ${finding.status}`, '');
   }
   lines.push('## Remaining Risks', '', '- Manual security review is not automated by this dashboard.', '- A clean scanner result does not prove the project is perfectly secure.', '');
   return `${redact(lines.join('\n'))}\n`;
 }
 
-function finishRun(run) {
+function updateReleaseGate(run) {
+  const blockingSummary = countBlockingCorrelatedFindings(run.correlatedFindings);
+  const blockingFindings = (run.correlatedFindings || []).filter((finding) => ['OPEN', 'FIXED', 'REOPENED'].includes(finding.status));
+  const unresolvedHigh = blockingSummary.critical + blockingSummary.high;
   run.finishedAt = run.finishedAt || isoNow();
-  finalizeFindings(run);
-  const unresolvedHigh = run.summary.critical + run.summary.high;
   const toolErrors = Object.values(run.tools).filter((tool) => tool.status === 'ERROR' || (tool.status === 'FAIL' && tool.findingsCount === 0 && (tool.exitCode || 0) > 1)).length;
   const manualSkipped = run.stages.manual.status === 'SKIPPED';
   const incompleteAssessment = run.mode !== 'full' || manualSkipped || run.stages.web.status === 'SKIPPED';
   if (run.abortRequested) run.releaseGate = { label: 'DO NOT DEPLOY', reason: 'The scan was stopped before the assessment completed.' };
-  else if (unresolvedHigh > 0) run.releaseGate = { label: 'DO NOT DEPLOY', reason: `${unresolvedHigh} unresolved Critical/High finding${unresolvedHigh === 1 ? '' : 's'}.` };
+  else if (unresolvedHigh > 0) run.releaseGate = { label: 'DO NOT DEPLOY', reason: `${unresolvedHigh} unresolved correlated Critical/High finding${unresolvedHigh === 1 ? '' : 's'}.` };
   else if (toolErrors > 0) run.releaseGate = { label: 'DO NOT DEPLOY', reason: `${toolErrors} scanner${toolErrors === 1 ? '' : 's'} failed to execute.` };
   else if (incompleteAssessment) run.releaseGate = { label: 'DO NOT DEPLOY', reason: 'The performed assessment still has skipped runtime or manual review stages.' };
   else run.releaseGate = { label: 'READY TO DEPLOY', reason: 'No known Critical/High findings detected by the performed assessment.' };
-  run.status = run.abortRequested ? 'STOPPED' : unresolvedHigh > 0 || toolErrors > 0 ? 'FAIL' : incompleteAssessment || run.summary.total > 0 ? 'PASS WITH WARNINGS' : 'PASS';
+  run.status = run.abortRequested ? 'STOPPED' : unresolvedHigh > 0 || toolErrors > 0 ? 'FAIL' : incompleteAssessment || blockingFindings.length > 0 || run.correlatedFindings.some((finding) => finding.status === 'ACCEPTED_RISK') ? 'PASS WITH WARNINGS' : 'PASS';
   run.currentStage = 'decision';
   run.stages.decision.status = run.status === 'FAIL' ? 'FAIL' : run.status === 'PASS' ? 'PASS' : 'WARNING';
   run.stages.decision.finishedAt = run.finishedAt;
+}
+
+function finishRun(run) {
+  run.finishedAt = run.finishedAt || isoNow();
+  finalizeFindings(run);
+  updateReleaseGate(run);
   atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
   atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
   saveRun(run);
@@ -754,13 +810,30 @@ function hydrateRun(id) {
     const events = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map((line) => ({ schemaVersion: SCHEMA_VERSION, ...JSON.parse(line) }));
     const findings = persistedFindings.filter((item) => item.status !== 'VERIFIED');
     const resolvedFindings = persistedFindings.filter((item) => item.status === 'VERIFIED');
+    const project = projectIdentity(metadata.projectPath);
+    let correlation = null;
+    try { correlation = JSON.parse(fs.readFileSync(path.join(dir, 'correlation.json'), 'utf8')); } catch { /* v0.2 run without correlation data */ }
+    const derived = correlation?.findings ? correlation : reconcileFindings([], persistedFindings, {
+      projectId: metadata.projectId || project.id,
+      projectPath: metadata.projectPath,
+      runId: id,
+      startedAt: metadata.startedAt,
+      observedAt: metadata.finishedAt || metadata.startedAt,
+    });
+    const correlatedFindings = correlation?.findings || derived.findings;
+    const correlatedSummary = correlation?.summary || countCorrelatedFindings(correlatedFindings);
     const run = {
       ...metadata,
       schemaVersion: metadata.schemaVersion || SCHEMA_VERSION,
+      projectId: metadata.projectId || project.id,
       dir,
       findings,
       resolvedFindings,
-      summary: countFindings(findings),
+      correlatedFindings,
+      correlationSuggestions: correlation?.suggestions || derived.suggestions || [],
+      correlatedSummary,
+      observationSummary: metadata.observationSummary || countFindings(findings),
+      summary: correlation ? (metadata.summary || correlatedSummary) : countFindings(findings),
       events,
       processes: new Set(),
       abortRequested: false,
@@ -944,6 +1017,32 @@ const server = http.createServer(async (request, response) => {
       for (const child of run.processes) child.kill('SIGTERM');
       writeEvent(run, { kind: 'scan-stop-requested', message: 'Stop requested; waiting for the active scanner to exit.' });
       return sendJson(response, 202, { ok: true });
+    }
+    if (request.method === 'POST' && /^\/api\/runs\/[^/]+\/findings\/[^/]+\/status$/.test(pathname)) {
+      const parts = pathname.split('/');
+      const run = hydrateRun(decodeURIComponent(parts[3]));
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      const findingId = decodeURIComponent(parts[5]);
+      const body = await readBody(request);
+      const index = readProjectIndex(run.projectId);
+      const finding = index.findings.find((item) => item.id === findingId);
+      if (!finding) return sendJson(response, 404, { error: 'Correlated finding not found' });
+      try {
+        explicitLifecycleAction(finding, body.status, { reason: redact(body.reason || ''), runId: run.id, timestamp: isoNow() });
+      } catch (error) {
+        return sendJson(response, 400, { error: redact(error.message) });
+      }
+      saveProjectIndex(index);
+      run.correlatedFindings = index.findings;
+      run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
+      run.summary = run.correlatedSummary;
+      updateReleaseGate(run);
+      atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
+      atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
+      saveRun(run);
+      writeEvent(run, { kind: 'finding-lifecycle', findingId, status: finding.status, message: `${finding.id} marked ${finding.status}${body.reason ? ` — ${redact(body.reason)}` : ''}` });
+      saveRun(run);
+      return sendJson(response, 200, { finding, run });
     }
     if (request.method === 'POST' && pathname === '/api/toolkit/doctor') return sendJson(response, 200, await toolkitHealth());
     if (request.method === 'POST' && pathname === '/api/toolkit/self-test') {

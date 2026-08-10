@@ -225,16 +225,29 @@ code, .mono { font-family: var(--mono); font-size: 0.88em; }
 .findings-list { display: grid; gap: 10px; margin-top: 16px; }
 .finding-card { padding: 17px 18px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); }
 .finding-card.is-verified { background: #f8fbf9; }
+.finding-card--pass { background: #f8fbf9; border-color: rgba(35, 130, 93, 0.34); }
+.finding-card--warning { background: #fffdf8; border-color: rgba(216, 139, 45, 0.34); }
+.finding-card--fail { border-color: rgba(184, 76, 69, 0.34); }
 .finding-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .finding-title { margin: 0; font-size: 14px; line-height: 1.35; }
 .finding-id { display: block; margin-top: 4px; color: var(--ink-faint); font-family: var(--mono); font-size: 10px; }
+.finding-badges { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .severity-label { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border-radius: 5px; font-family: var(--mono); font-size: 10px; font-weight: 800; }
 .severity-label--critical, .severity-label--high { color: var(--red); background: var(--red-soft); }.severity-label--medium { color: #8a5a19; background: var(--amber-soft); }.severity-label--low, .severity-label--info { color: var(--blue); background: var(--blue-soft); }.severity-label--unknown { color: var(--ink-soft); background: var(--paper-deep); }
+.lifecycle-label { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border-radius: 5px; font-family: var(--mono); font-size: 10px; font-weight: 800; }
+.lifecycle-label--fail { color: var(--red); background: var(--red-soft); }.lifecycle-label--warning { color: #8a5a19; background: var(--amber-soft); }.lifecycle-label--pass { color: var(--green); background: var(--green-soft); }.lifecycle-label--neutral { color: var(--ink-soft); background: var(--paper-deep); }
 .finding-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
 .finding-section span { display: block; margin-bottom: 3px; color: var(--ink-faint); font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
 .finding-section p { margin: 0; color: var(--ink-soft); font-size: 11px; }
+.finding-observations { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 14px; }
+.finding-observations span { padding: 5px 7px; color: var(--ink-soft); background: var(--paper-deep); border-radius: 5px; font-family: var(--mono); font-size: 9px; }
+.finding-observation-details { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.finding-observation-details summary { color: var(--blue); cursor: pointer; font-family: var(--mono); font-size: 10px; font-weight: 750; }
+.finding-observation-details pre { max-height: 260px; margin: 10px 0 0; padding: 11px; overflow: auto; color: var(--ink-soft); background: var(--paper); border-radius: 7px; font-family: var(--mono); font-size: 9px; line-height: 1.5; white-space: pre-wrap; }
+.finding-raw-note { margin: 10px 0 0; color: var(--ink-faint); font-size: 10px; }
 .finding-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 15px; color: var(--ink-faint); font-family: var(--mono); font-size: 10px; }
 .finding-status { color: var(--green); font-weight: 800; }
+.finding-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--line); }
 
 .history-list { display: grid; gap: 8px; }
 .history-row { display: grid; grid-template-columns: 1.3fr 0.7fr 0.8fr 0.6fr auto; align-items: center; gap: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 11px; background: var(--white); transition: border-color 150ms ease, transform 150ms ease; }

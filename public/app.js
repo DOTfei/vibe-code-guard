@@ -49,9 +49,9 @@ function toolDuration(tool) {
 function statusClass(status) {
   const value = String(status || '').toLowerCase();
   if (value === 'running' || value === 'scanning') return 'running';
-  if (value === 'pass' || value === 'healthy') return 'pass';
-  if (value === 'warning' || value === 'pass with warnings' || value === 'skipped') return 'warning';
-  if (value === 'fail' || value === 'broken' || value === 'error') return 'fail';
+  if (value === 'pass' || value === 'healthy' || value === 'verified') return 'pass';
+  if (value === 'warning' || value === 'pass with warnings' || value === 'skipped' || value === 'fixed' || value === 'false_positive' || value === 'accepted_risk') return 'warning';
+  if (value === 'fail' || value === 'broken' || value === 'error' || value === 'open' || value === 'reopened') return 'fail';
   return 'neutral';
 }
 
@@ -206,10 +206,11 @@ function renderOrchestration(run) {
 
 function allFindings() {
   const run = currentRun();
-  return run ? [...(run.findings || []), ...(run.resolvedFindings || [])] : [];
+  return run ? (run.correlatedFindings || [...(run.findings || []), ...(run.resolvedFindings || [])]) : [];
 }
 
 function renderFindings() {
+  const run = currentRun();
   const findings = allFindings();
   const counts = findings.reduce((result, finding) => { result[finding.severity] = (result[finding.severity] || 0) + 1; result.ALL += 1; return result; }, { ALL: 0, CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0, UNKNOWN: 0 });
   Object.entries(counts).forEach(([key, value]) => { const el = $(`#finding-count-${key.toLowerCase()}`); if (el) el.textContent = value; });
@@ -221,11 +222,36 @@ function renderFindings() {
     container.innerHTML = `<div class="empty-state">${findings.length ? 'No findings match this severity filter.' : 'No parsed findings for the selected run.'}</div>`;
     return;
   }
-  container.innerHTML = visible.map((finding) => `<article class="finding-card ${finding.status === 'VERIFIED' ? 'is-verified' : ''}">
-    <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${escapeHTML(finding.scanner?.name || finding.scanner?.id || 'Unknown scanner')}</span></div><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span></div>
-    <div class="finding-grid"><div class="finding-section"><span>Technical explanation</span><p>${escapeHTML(finding.explanation?.technical || 'Not supplied')}</p></div><div class="finding-section"><span>Simple explanation</span><p>${escapeHTML(finding.explanation?.simple || 'Not supplied')}</p></div><div class="finding-section"><span>Why it matters</span><p>${escapeHTML(finding.explanation?.whyItMatters || 'Not supplied')}</p></div></div>
-    <div class="finding-footer"><span>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
-  </article>`).join('');
+  container.innerHTML = visible.map((finding) => {
+    const observations = finding.observations || [];
+    const detectedBy = [...new Set(observations.map((observation) => observation.scanner).filter(Boolean))];
+    const rawFindings = (run?.findings || []).filter((raw) => observations.some((observation) => observation.scannerFindingId === raw.id));
+    const lastEvent = finding.history?.[finding.history.length - 1];
+    const terminal = ['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(finding.status);
+    return `<article class="finding-card finding-card--${statusClass(finding.status)}">
+      <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${observations.length} observation${observations.length === 1 ? '' : 's'}</span></div><div class="finding-badges"><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span><span class="lifecycle-label lifecycle-label--${statusClass(finding.status)}">${escapeHTML(finding.status)}</span></div></div>
+      <div class="finding-grid"><div class="finding-section"><span>Detected by</span><p>${escapeHTML(detectedBy.join(' · ') || 'Historical compatibility view')}</p></div><div class="finding-section"><span>Location</span><p>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</p></div><div class="finding-section"><span>Correlation confidence</span><p>${escapeHTML(finding.confidence || 'NONE')}</p></div></div>
+      <details class="finding-observation-details"><summary>Show ${observations.length} scanner observation${observations.length === 1 ? '' : 's'}</summary><div class="finding-observations">${observations.map((observation) => `<span>${escapeHTML(observation.scanner || 'unknown')} · ${escapeHTML(observation.ruleId || 'rule')} · ${escapeHTML(observation.runId || 'run')}</span>`).join('')}</div>${rawFindings.length ? `<pre>${escapeHTML(JSON.stringify(rawFindings, null, 2))}</pre>` : '<p class="finding-raw-note">Raw Unified Findings are available in the run API for historical observations.</p>'}</details>
+      <div class="finding-footer"><span>${lastEvent ? `${escapeHTML(lastEvent.event)} · ${escapeHTML(formatDate(lastEvent.timestamp))}` : 'No lifecycle history'}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
+      <div class="finding-actions">${terminal ? `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>` : `<button class="button button--secondary finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FIXED" type="button">Mark as fixed</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FALSE_POSITIVE" type="button">False positive</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="ACCEPTED_RISK" type="button">Accept risk</button>`}</div>
+    </article>`;
+  }).join('');
+  $$('.finding-action').forEach((button) => button.addEventListener('click', () => updateFindingStatus(button.dataset.findingId, button.dataset.actionStatus)));
+}
+
+async function updateFindingStatus(findingId, status) {
+  const needsReason = ['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(status);
+  const reason = window.prompt(needsReason ? `Reason required for ${status.replaceAll('_', ' ').toLowerCase()}:` : 'Optional lifecycle note:', '');
+  if (reason === null) return;
+  try {
+    const run = currentRun();
+    if (!run) throw new Error('Select a completed run first.');
+    const response = await requestJSON(`/api/runs/${encodeURIComponent(run.id)}/findings/${encodeURIComponent(findingId)}/status`, { method: 'POST', body: JSON.stringify({ status, reason }) });
+    appState.latest = response.run;
+    renderOverview();
+    renderFindings();
+    showToast(`${findingId} marked ${status}.`);
+  } catch (error) { showToast(error.message); }
 }
 
 function renderHistory() {

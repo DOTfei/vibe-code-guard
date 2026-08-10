@@ -12,6 +12,7 @@ const osvScanner = require('./adapters/osv-scanner');
 const checkov = require('./adapters/checkov');
 const zap = require('./adapters/zap');
 const nuclei = require('./adapters/nuclei');
+const correlation = require('../correlation');
 
 const ADAPTERS = Object.freeze({ gitleaks, trufflehog, semgrep, trivy, 'osv-scanner': osvScanner, checkov, zap, nuclei });
 
@@ -50,4 +51,6 @@ module.exports = {
   sanitizeEvidence,
   sanitizeText,
   validateFinding,
+  correlation,
+  ...correlation,
 };
