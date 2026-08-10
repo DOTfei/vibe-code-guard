@@ -21,6 +21,7 @@ and `security-toolchain.lock` for portable integration metadata.
 | OWASP ZAP | [zaproxy/zaproxy](https://github.com/zaproxy/zaproxy) | Apache-2.0 | External application/CLI; not bundled or modified |
 | Nuclei | [projectdiscovery/nuclei](https://github.com/projectdiscovery/nuclei) | MIT | External CLI; not bundled or modified |
 | Strix | [usestrix/strix](https://github.com/usestrix/strix) | Apache-2.0 | Optional external/agent integration; not bundled |
+| Next AI Draw.io | [DayuanJiang/next-ai-draw-io](https://github.com/DayuanJiang/next-ai-draw-io) | Apache-2.0 | External documentation/diagram tool; not bundled or modified |
 
 ## License review notes
 
@@ -31,6 +32,9 @@ redistributes those projects. The current design only invokes independently
 installed tools and does not copy their source, binaries, rules, templates, or
 libraries into this repository. Re-review licensing before distributing a
 combined binary, container image, installer, or linked library.
+
+Next AI Draw.io is listed because it was used to edit/export the README
+architecture diagram. It is not a runtime dependency of this repository.
 
 This notice is an attribution record, not legal advice. Upstream notices and
 dependencies distributed by each tool remain governed by that tool's own

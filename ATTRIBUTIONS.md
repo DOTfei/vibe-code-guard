@@ -29,4 +29,5 @@ source code, binaries, templates, rules, or databases. See
 [Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io) was used as an
 external diagram editing/export tool for the README architecture visualization.
 Its MCP server loaded and exported the `.drawio` source; no Next AI Draw.io
-source code, binary, or runtime dependency is bundled in this repository.
+source code, binary, or runtime dependency is bundled in this repository. The
+upstream project is licensed under [Apache-2.0](https://raw.githubusercontent.com/DayuanJiang/next-ai-draw-io/main/LICENSE).
