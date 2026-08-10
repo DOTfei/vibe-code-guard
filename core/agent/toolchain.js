@@ -8,6 +8,26 @@ const MANIFEST_PATH = path.join(ROOT, 'config', 'toolchain.json');
 const TOOLKIT_HOME = () => process.env.SECURITY_TOOLKIT_HOME || path.join(os.homedir(), 'security-toolkit');
 const OUTPUT_LIMIT = 32 * 1024;
 
+function safeToolkitHome(input = TOOLKIT_HOME()) {
+  const resolved = path.resolve(String(input || ''));
+  const home = path.resolve(os.homedir());
+  if (!resolved || resolved === path.parse(resolved).root || resolved === home) throw new Error('SECURITY_TOOLKIT_HOME must not be a filesystem root or the home directory itself.');
+  let cursor = resolved;
+  while (cursor !== path.dirname(cursor)) {
+    try {
+      if (fs.lstatSync(cursor).isSymbolicLink()) {
+        const real = fs.realpathSync(cursor);
+        const trustedMacAlias = (cursor === '/var' || cursor === '/tmp') && real === `/private${cursor}`;
+        if (!trustedMacAlias) throw new Error(`SECURITY_TOOLKIT_HOME path must not traverse a symbolic link: ${cursor}`);
+      }
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    cursor = path.dirname(cursor);
+  }
+  return resolved;
+}
+
 function loadManifest() {
   return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
 }
@@ -89,12 +109,35 @@ function versionText(result) {
   return String(result.output || '').replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '').replace(/\s+/g, ' ').trim().slice(0, 240) || null;
 }
 
+function parseVersion(value, pattern = null) {
+  const match = pattern
+    ? String(value || '').match(new RegExp(pattern))
+    : String(value || '').match(/(?:^|[^0-9])v?(\d+)\.(\d+)(?:\.(\d+))?/);
+  if (pattern && !match) return null;
+  if (pattern) return parseVersion(match[1]);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+}
+
+function minimumVersion(range) {
+  const match = String(range || '').match(/^>=\s*(\d+)\.(\d+)(?:\.(\d+))?/);
+  return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+}
+
+function compareVersions(left, right) {
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return 0;
+}
+
 async function inspectTool(tool) {
   const binaryPath = await resolveTool(tool);
   const base = {
     id: tool.id,
     displayName: tool.displayName,
     required: tool.required !== false,
+    doctorCheck: tool.doctorCheck || 'binary-and-version',
+    selfTest: tool.selfTest || null,
     supportedVersionRange: tool.supportedVersionRange || null,
     installMethod: tool.install?.type || 'manual',
     officialSource: tool.install?.official || null,
@@ -109,7 +152,22 @@ async function inspectTool(tool) {
   }
   const version = await runFile(binaryPath, tool.versionArgs || ['--version'], { timeoutMs: 5000 });
   base.version = versionText(version);
-  if (version.code === 0 || (version.code === 1 && base.version)) base.status = 'READY';
+  const parsedVersion = parseVersion(base.version, tool.versionPattern);
+  base.versionVerified = Boolean(parsedVersion);
+  base.versionNumber = parsedVersion ? parsedVersion.join('.') : null;
+  if (version.code === 0 || (version.code === 1 && base.version)) {
+    base.status = 'READY';
+    if (!parsedVersion) {
+      base.status = 'DEGRADED';
+      base.reason = 'Version command completed but no semantic version could be verified.';
+    } else {
+      const minimum = minimumVersion(tool.supportedVersionRange);
+      if (minimum && compareVersions(parsedVersion, minimum) < 0) {
+        base.status = 'DEGRADED';
+        base.reason = `Detected version ${base.versionNumber} is below the supported range ${tool.supportedVersionRange}; no automatic downgrade or replacement will be attempted.`;
+      }
+    }
+  }
   else if (/ca-certs|trust anchors|certificate|dns|network|registry|not writable|permission denied/i.test(version.output || '')) {
     base.status = 'DEGRADED';
     base.reason = 'Version command was affected by an environment or network trust dependency.';
@@ -186,15 +244,15 @@ async function commandExists(command) {
   return Boolean(await which(command));
 }
 
-async function installPlan({ includeTools = true } = {}) {
+async function installPlan({ includeTools = true, inspect = inspectTool, commandExistsFn = commandExists } = {}) {
   const manifest = loadManifest();
   const inspected = {};
-  for (const tool of manifest.tools) inspected[tool.id] = await inspectTool(tool);
+  for (const tool of manifest.tools) inspected[tool.id] = await inspect(tool);
   const actions = [];
   const notes = [];
-  const brew = await commandExists('brew');
-  const pipx = await commandExists('pipx');
-  const python = await commandExists('python3');
+  const brew = await commandExistsFn('brew');
+  const pipx = await commandExistsFn('pipx');
+  const python = await commandExistsFn('python3');
   if (includeTools) {
     for (const tool of manifest.tools) {
       if (inspected[tool.id].status !== 'NOT_INSTALLED') {
@@ -226,6 +284,7 @@ function managedLauncher(sourceRoot) {
 
 function ownershipPath(filePath, sourceRoot) {
   try {
+    if (fs.lstatSync(filePath).isSymbolicLink()) return false;
     const current = fs.readFileSync(filePath, 'utf8');
     return current.includes('VIBE_CODE_GUARD_MANAGED=1') && current.includes(path.join(sourceRoot, 'bin', 'vibe-code-guard.js'));
   } catch {
@@ -234,11 +293,15 @@ function ownershipPath(filePath, sourceRoot) {
 }
 
 function installLocalEntrypoints({ sourceRoot = ROOT, toolkitHome = TOOLKIT_HOME(), dryRun = false } = {}) {
-  const binDir = path.join(toolkitHome, 'bin');
-  const ownedDir = path.join(toolkitHome, 'vibe-code-guard');
+  const safeHome = safeToolkitHome(toolkitHome);
+  const binDir = path.join(safeHome, 'bin');
+  const ownedDir = path.join(safeHome, 'vibe-code-guard');
+  for (const directory of [binDir, ownedDir]) {
+    try { if (fs.lstatSync(directory).isSymbolicLink()) throw new Error(`Refusing to follow symbolic-link directory: ${directory}`); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  }
   const files = [path.join(binDir, 'vibe-code-guard'), path.join(binDir, 'security-check')];
   const conflicts = files.filter((filePath) => fs.existsSync(filePath) && !ownershipPath(filePath, sourceRoot));
-  if (dryRun) return { files, ownedDir, changed: false, conflicts };
+  if (dryRun) return { files, ownedDir, binDir, pathHint: binDir, changed: false, conflicts };
   fs.mkdirSync(binDir, { recursive: true, mode: 0o755 });
   fs.mkdirSync(ownedDir, { recursive: true, mode: 0o755 });
   const launcher = managedLauncher(sourceRoot);
@@ -249,19 +312,22 @@ function installLocalEntrypoints({ sourceRoot = ROOT, toolkitHome = TOOLKIT_HOME
   }
   const manifest = { manifestVersion: '1.0', productVersion: require(path.join(sourceRoot, 'package.json')).version, sourceRoot, files: installedFiles, preservedConflicts: conflicts, ownedDir, installedAt: new Date().toISOString() };
   fs.writeFileSync(path.join(ownedDir, 'installation.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
-  return { files: installedFiles, ownedDir, changed: installedFiles.length > 0, conflicts };
+  return { files: installedFiles, ownedDir, binDir, pathHint: binDir, changed: installedFiles.length > 0, conflicts };
 }
 
 function uninstallLocalEntrypoints({ toolkitHome = TOOLKIT_HOME(), dryRun = false } = {}) {
-  const ownedDir = path.join(toolkitHome, 'vibe-code-guard');
+  const safeHome = safeToolkitHome(toolkitHome);
+  const binDir = path.join(safeHome, 'bin');
+  const ownedDir = path.join(safeHome, 'vibe-code-guard');
   const manifestPath = path.join(ownedDir, 'installation.json');
   if (!fs.existsSync(manifestPath)) return { status: 'NOT_INSTALLED', removed: [], preserved: [] };
   let manifest;
   try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); } catch { throw new Error('Vibe Code Guard installation manifest is unreadable; refusing cleanup.'); }
   const removed = [];
   const preserved = [];
+  const allowedFiles = new Set([path.join(binDir, 'vibe-code-guard'), path.join(binDir, 'security-check')]);
   for (const filePath of Array.isArray(manifest.files) ? manifest.files : []) {
-    if (!ownershipPath(filePath, manifest.sourceRoot)) { preserved.push(filePath); continue; }
+    if (!allowedFiles.has(filePath) || !ownershipPath(filePath, manifest.sourceRoot)) { preserved.push(filePath); continue; }
     if (!dryRun) fs.rmSync(filePath, { force: true });
     removed.push(filePath);
   }
@@ -279,11 +345,14 @@ module.exports = {
   runFile,
   resolveTool,
   inspectTool,
+  parseVersion,
+  compareVersions,
   doctor,
   toolkitSelfTest,
   installPlan,
   installLocalEntrypoints,
   uninstallLocalEntrypoints,
+  safeToolkitHome,
   extractJson,
   TOOLKIT_HOME,
 };

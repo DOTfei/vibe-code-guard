@@ -409,6 +409,20 @@ function stageFinish(run, stageId, status, note = '') {
 function skipStage(run, stageId, note) {
   run.stages[stageId].status = 'SKIPPED';
   run.stages[stageId].note = note;
+  const stageTools = {
+    secrets: ['gitleaks', 'trufflehog'],
+    static: ['semgrep'],
+    dependencies: ['osv-scanner', 'trivy'],
+    infrastructure: ['checkov', 'trivy'],
+    web: ['nuclei', 'zap'],
+  }[stageId] || [];
+  for (const toolId of stageTools) {
+    const tool = run.tools[toolId];
+    if (!tool || tool.status !== 'WAITING') continue;
+    tool.status = 'SKIPPED';
+    tool.decision = 'SKIP';
+    tool.decisionReason = note;
+  }
   writeEvent(run, { kind: 'stage-skipped', stage: stageId, status: 'SKIPPED', message: `${run.stages[stageId].label}: skipped — ${note}` });
   saveRun(run);
 }
@@ -492,7 +506,8 @@ function executeScanner(run, { tool, stage, args, outputName, parser, reportPath
       meta.version = meta.version || null;
       if (run.abortRequested || error?.code === 'ABORT_ERR') meta.status = 'STOPPED';
       else if (error || exitCode === null) { meta.status = 'ERROR'; meta.error = redact(error?.message || 'Process failed to start'); }
-      else meta.status = findings.length > 0 || exitCode > 1 ? 'FAIL' : 'PASS';
+      else if (exitCode > 1) { meta.status = 'FAIL'; meta.error = `Scanner exited with code ${exitCode}.`; }
+      else meta.status = 'PASS';
       writeEvent(run, {
         kind: 'tool-finished', stage, tool, status: meta.status, exitCode,
         message: `${meta.label} ${meta.status}${findings.length ? ` — ${findings.length} finding${findings.length === 1 ? '' : 's'}` : ''}`,
@@ -522,15 +537,16 @@ function safeWebTarget(input) {
   if (!input) return null;
   try {
     const parsed = new URL(input);
-    if (parsed.protocol !== 'http:') return null;
-    const allowed = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const allowed = new Set(['localhost', '127.0.0.1', '::1']);
     const configured = [process.env.SECURITY_AUTHORIZED_TARGETS, process.env.VIBE_CODE_GUARD_AUTHORIZED_TARGETS]
       .flatMap((value) => String(value || '').split(','))
       .map((item) => item.trim())
       .map((item) => item.replace(/\/$/, ''))
       .filter(Boolean);
     const normalized = parsed.toString().replace(/\/$/, '');
-    return allowed.has(parsed.hostname) || configured.includes(normalized) ? normalized : null;
+    return allowed.has(hostname) || configured.includes(normalized) ? normalized : null;
   } catch {
     return null;
   }

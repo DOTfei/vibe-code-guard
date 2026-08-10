@@ -218,7 +218,10 @@ vibe-code-guard dashboard --json
 
 Use `quick`, `full`, or `release` when the agent or human needs an explicit
 profile. See [`docs/installation.md`](docs/installation.md) for manual
-fallback, status states, update, and uninstall behavior.
+fallback, status states, cross-platform support, update, and uninstall behavior.
+If the launcher directory is not already on PATH, use the absolute entrypoint
+reported by `./install.sh --yes`; the installer intentionally does not edit
+shell startup files.
 
 The existing global health commands remain available:
 

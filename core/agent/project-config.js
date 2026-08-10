@@ -22,7 +22,8 @@ function validateRuntimeTarget(value) {
   try {
     const parsed = new URL(value);
     if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) return { target: value, allowed: false, reason: 'Only credential-free HTTP(S) targets are supported.' };
-    const localHost = ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+    const hostname = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const localHost = ['localhost', '127.0.0.1', '::1'].includes(hostname);
     const exactAuthorized = authorizedTargets().has(value) || authorizedTargets().has(parsed.toString().replace(/\/$/, ''));
     if (!localHost && !exactAuthorized) return { target: value, allowed: false, reason: 'Active runtime scanning requires localhost or an exact explicitly authorized target.' };
     return { target: parsed.toString().replace(/\/$/, ''), allowed: true, reason: localHost ? 'Localhost target allowed.' : 'Exact target is explicitly authorized by VIBE_CODE_GUARD_AUTHORIZED_TARGETS.' };
@@ -48,7 +49,7 @@ function validateConfig(input) {
   if (input.ignoredPaths !== undefined) {
     if (!Array.isArray(input.ignoredPaths) || input.ignoredPaths.length > MAX_IGNORED_PATHS) throw new Error(`ignoredPaths must be an array with at most ${MAX_IGNORED_PATHS} entries.`);
     for (const item of input.ignoredPaths) {
-      if (typeof item !== 'string' || !item || path.isAbsolute(item) || item.split(/[\\/]/).includes('..') || item.includes('\0')) throw new Error('ignoredPaths must contain safe relative paths without traversal.');
+      if (typeof item !== 'string' || !item || item.length > 1024 || /[\0\r\n;&|$`()<>`!]/.test(item) || path.isAbsolute(item) || item.split(/[\\/]/).includes('..')) throw new Error('ignoredPaths must contain safe relative paths of at most 1024 characters without traversal or shell metacharacters.');
     }
     config.ignoredPaths = [...new Set(input.ignoredPaths)];
   }

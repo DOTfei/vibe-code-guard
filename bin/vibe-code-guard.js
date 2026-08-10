@@ -16,6 +16,7 @@ const {
   installPlan,
   readProjectConfig,
   runFile,
+  safeToolkitHome,
   toolkitSelfTest,
   uninstallLocalEntrypoints,
   validateRuntimeTarget,
@@ -99,6 +100,9 @@ function renderInstall(data) {
     for (const action of plan.actions) lines.push(`- ${action.id}: ${action.command} ${action.args.join(' ')}`);
     for (const note of plan.notes) lines.push(`- NOTE: ${note}`);
   }
+  if (data.localEntrypoints?.pathHint) {
+    lines.push(`Vibe Code Guard entrypoint directory: ${data.localEntrypoints.pathHint}`, 'The installer did not modify shell startup files; use the absolute launcher path or add this directory to PATH explicitly.');
+  }
   if (data.nextAction) lines.push(data.nextAction);
   if (data.doctor) lines.push(`Doctor: ${data.doctor.status}`, `Self-test: ${data.selfTest?.overall || 'UNKNOWN'}`);
   return lines.join('\n');
@@ -130,7 +134,8 @@ function selectRuntimeTarget(configTargets, explicit) {
 }
 
 function dashboardState() {
-  const statePath = path.join(TOOLKIT_HOME(), 'vibe-code-guard', 'dashboard.json');
+  let statePath;
+  try { statePath = path.join(safeToolkitHome(TOOLKIT_HOME()), 'vibe-code-guard', 'dashboard.json'); } catch { return null; }
   try {
     const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
     return state.dashboardUrl ? state : null;
@@ -169,6 +174,9 @@ async function commandAudit(options) {
     issues: run.summary,
     correlatedFindings: run.correlatedFindings || [],
     scannerObservations: run.observationSummary,
+    scannerStates: run.tools,
+    errors: Object.values(run.tools).filter((tool) => ['ERROR', 'FAIL', 'BROKEN'].includes(tool.status)).map((tool) => ({ tool: tool.id, status: tool.status, error: tool.error || null, exitCode: tool.exitCode ?? null })),
+    skipped: Object.values(run.tools).filter((tool) => ['SKIPPED', 'NOT_APPLICABLE', 'RECOMMENDED'].includes(tool.status)).map((tool) => ({ tool: tool.id, status: tool.status, reason: tool.decisionReason || null })),
     doctor: health,
     dashboardUrl: dashboardState()?.dashboardUrl || null,
     dashboardCommand: 'vibe-code-guard dashboard',
@@ -219,7 +227,8 @@ async function commandDashboard(options) {
   if (hasRequestedPort && (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535)) throw new Error('Dashboard port must be 0 (auto) or an integer between 1 and 65535.');
   const port = await findPort(requestedPort);
   const url = `http://127.0.0.1:${port}`;
-  const dataDir = process.env.SECURITY_DASHBOARD_DATA_DIR || path.join(TOOLKIT_HOME(), 'runs');
+  const toolkitHome = safeToolkitHome(TOOLKIT_HOME());
+  const dataDir = process.env.SECURITY_DASHBOARD_DATA_DIR || path.join(toolkitHome, 'runs');
   if (options.dryRun) return emit({ json: options.json, data: { status: 'PLANNED', host: '127.0.0.1', port, dashboardUrl: url, localOnly: true, dataDir }, code: 0 }, `Dashboard plan: ${url} (127.0.0.1 only)`);
   const child = spawn(process.execPath, [path.join(ROOT, 'server.js')], {
     detached: true,
@@ -229,7 +238,7 @@ async function commandDashboard(options) {
   child.unref();
   const health = await waitForHealth(url);
   if (!health) return emit({ json: options.json, data: { status: 'FAILED', dashboardUrl: url, reason: 'Local Dashboard did not become healthy within the startup window.' }, code: 1 }, 'Dashboard failed to start.');
-  const stateDir = path.join(TOOLKIT_HOME(), 'vibe-code-guard');
+  const stateDir = path.join(toolkitHome, 'vibe-code-guard');
   fs.mkdirSync(stateDir, { recursive: true, mode: 0o755 });
   fs.writeFileSync(path.join(stateDir, 'dashboard.json'), `${JSON.stringify({ dashboardUrl: url, pid: child.pid, dataDir, startedAt: new Date().toISOString(), localOnly: true }, null, 2)}\n`, { mode: 0o600 });
   return emit({ json: options.json, data: { status: 'READY', dashboardUrl: url, host: '127.0.0.1', port, pid: child.pid, dataDir, localOnly: true }, code: 0 }, `Dashboard ready: ${url}\nLocal-only binding: 127.0.0.1`);

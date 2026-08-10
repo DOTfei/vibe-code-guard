@@ -17,6 +17,8 @@ AI provider.
   calculates the release gate.
 - Correlated Findings are the main issue layer. Raw Unified Findings and
   scanner observations remain available as evidence.
+- The deterministic release gate is authoritative; advisory explanations can
+  never change its decision.
 - The agent may explain evidence and may edit code only after the user asks or
   clearly authorizes a fix.
 - Never invent scanner output, claim that an unrun scanner passed, or claim
@@ -37,7 +39,9 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 3. Verify the installation with `vibe-code-guard doctor --json`.
 4. If the user asked to install it, run `./install.sh --dry-run`, explain the
    planned changes, and then run `./install.sh --yes` when that installation
-   request authorizes the plan.
+   request authorizes the plan. Read the returned `localEntrypoints.pathHint`;
+   because the installer never edits shell startup files, use the returned
+   absolute launcher path if `vibe-code-guard` is not already on PATH.
 5. Run one profile through the canonical command; do not invoke the eight
    upstream scanners individually:
 
