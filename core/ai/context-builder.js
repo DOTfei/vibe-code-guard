@@ -1,5 +1,5 @@
 const crypto = require('node:crypto');
-const { redactValue, redactionCount, safeLocation, safeObservation, safeRawFinding, truncate, MAX_OBSERVATIONS, MAX_RAW_FINDINGS } = require('./redaction');
+const { redactValue, redactionCount, safeLocation, safeObservation, safeRawFinding, safeToken, truncate, MAX_OBSERVATIONS, MAX_RAW_FINDINGS } = require('./redaction');
 
 function stableValue(value) {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -34,17 +34,17 @@ function buildReviewContext({ finding, rawFindings = [], stack = [], lifecycleSt
   const context = {
     finding: {
       id: finding.id,
-      title: finding.title || 'Correlated security finding',
-      severity: finding.severity || 'UNKNOWN',
-      category: finding.category || 'UNKNOWN',
-      scannerConfidence: finding.confidence || 'UNKNOWN',
-      correlationKey: finding.correlationKey || null,
+      title: safeToken(finding.title || 'Correlated security finding', 4000, 'Correlated security finding'),
+      severity: safeToken(finding.severity || 'UNKNOWN', 30, 'UNKNOWN'),
+      category: safeToken(finding.category || 'UNKNOWN', 100, 'UNKNOWN'),
+      scannerConfidence: safeToken(finding.confidence || 'UNKNOWN', 30, 'UNKNOWN'),
+      correlationKey: finding.correlationKey ? safeToken(finding.correlationKey, 1000) : null,
       location: safeLocation(finding.location),
       lifecycleStatus: lifecycleStatus || finding.status || 'OPEN',
     },
     scannerEvidence: observations,
     redactedFindings: matchingRawFindings,
-    project: { stack: [...new Set(stack)].slice(0, 20) },
+    project: { stack: [...new Set(stack)].slice(0, 20).map((item) => safeToken(item, 120)) },
     releaseGate: {
       label: String(releaseGate.label || 'UNKNOWN').slice(0, 100),
       reason: String(releaseGate.reason || '').slice(0, 1000),

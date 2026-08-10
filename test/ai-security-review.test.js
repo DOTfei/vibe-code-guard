@@ -98,6 +98,11 @@ test('redaction and context limits remove secrets before provider input', () => 
   assert.match(context.codeSnippet, /REDACTED/);
   assert.ok(context.metadata.redactionCount >= 1);
   assert.ok(context.metadata.estimatedInputSize < 10000);
+  const poisoned = fixtureFinding();
+  poisoned.title = `token=${secret}`;
+  poisoned.observations[0].ruleId = `token=${secret}`;
+  const poisonedContext = fixtureContext({ finding: poisoned });
+  assert.equal(JSON.stringify(poisonedContext).includes(secret), false);
 });
 
 test('identical evidence is a cache hit and changed evidence becomes STALE', () => {

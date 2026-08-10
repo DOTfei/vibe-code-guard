@@ -9,6 +9,10 @@ function truncate(value, limit = MAX_SNIPPET_LENGTH) {
   return text.length > limit ? `${text.slice(0, limit)}\n[TRUNCATED]` : text;
 }
 
+function safeToken(value, limit, fallback = '') {
+  return sanitizeText(value, fallback).slice(0, limit);
+}
+
 function safeLocation(location = {}) {
   location = location || {};
   return {
@@ -20,31 +24,31 @@ function safeLocation(location = {}) {
 
 function safeObservation(observation = {}) {
   return {
-    scanner: String(observation.scanner || 'unknown').slice(0, 100),
-    scannerFindingId: String(observation.scannerFindingId || '').slice(0, 200),
-    fingerprint: String(observation.fingerprint || '').slice(0, 200),
-    ruleId: observation.ruleId ? String(observation.ruleId).slice(0, 200) : null,
-    severity: String(observation.severity || 'UNKNOWN').slice(0, 30),
-    category: String(observation.category || 'UNKNOWN').slice(0, 80),
+    scanner: safeToken(observation.scanner || 'unknown', 100, 'unknown'),
+    scannerFindingId: safeToken(observation.scannerFindingId || '', 200),
+    fingerprint: safeToken(observation.fingerprint || '', 200),
+    ruleId: observation.ruleId ? safeToken(observation.ruleId, 200) : null,
+    severity: safeToken(observation.severity || 'UNKNOWN', 30, 'UNKNOWN'),
+    category: safeToken(observation.category || 'UNKNOWN', 80, 'UNKNOWN'),
     location: safeLocation(observation.location),
     identity: {
-      kind: observation.identity?.kind || null,
-      ruleFamily: observation.identity?.ruleFamily || null,
-      secretFamily: observation.identity?.secretFamily || null,
-      vulnerabilityId: observation.identity?.vulnerabilityId || null,
-      packageName: observation.identity?.packageName || null,
-      ecosystem: observation.identity?.ecosystem || null,
+      kind: observation.identity?.kind ? safeToken(observation.identity.kind, 80) : null,
+      ruleFamily: observation.identity?.ruleFamily ? safeToken(observation.identity.ruleFamily, 120) : null,
+      secretFamily: observation.identity?.secretFamily ? safeToken(observation.identity.secretFamily, 120) : null,
+      vulnerabilityId: observation.identity?.vulnerabilityId ? safeToken(observation.identity.vulnerabilityId, 120) : null,
+      packageName: observation.identity?.packageName ? safeToken(observation.identity.packageName, 160) : null,
+      ecosystem: observation.identity?.ecosystem ? safeToken(observation.identity.ecosystem, 80) : null,
     },
   };
 }
 
 function safeRawFinding(finding = {}) {
   return {
-    id: String(finding.id || '').slice(0, 200),
+    id: safeToken(finding.id || '', 200),
     title: sanitizeText(finding.title, 'Scanner finding'),
-    severity: String(finding.severity || 'UNKNOWN').slice(0, 30),
-    category: String(finding.category || 'UNKNOWN').slice(0, 80),
-    scanner: String(finding.scanner?.id || finding.scanner || 'unknown').slice(0, 100),
+    severity: safeToken(finding.severity || 'UNKNOWN', 30, 'UNKNOWN'),
+    category: safeToken(finding.category || 'UNKNOWN', 80, 'UNKNOWN'),
+    scanner: safeToken(finding.scanner?.id || finding.scanner || 'unknown', 100, 'unknown'),
     location: safeLocation(finding.location),
     evidence: { summary: sanitizeText(finding.evidence?.summary || finding.evidence, 'Evidence was redacted before AI review.'), redacted: true },
   };
@@ -70,5 +74,6 @@ module.exports = {
   safeLocation,
   safeObservation,
   safeRawFinding,
+  safeToken,
   truncate,
 };
