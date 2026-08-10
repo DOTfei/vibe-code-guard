@@ -158,13 +158,13 @@
           </section>
 
           <section class="view" id="view-findings" data-view-panel="findings">
-            <div class="page-intro"><p class="eyebrow">Evidence, not assumptions</p><h2>Findings</h2><p class="muted">Every item below came from a scanner output saved for the selected run. Credential values are always redacted.</p></div>
+            <div class="page-intro"><p class="eyebrow">Evidence, not assumptions</p><h2>Correlated findings</h2><p class="muted">Each issue is one correlated security problem. Expand its scanner observations to see independent evidence; credential values are always redacted.</p></div>
             <div class="findings-toolbar"><div class="filter-tabs" role="tablist" aria-label="Finding severity"><button class="filter-tab is-active" data-severity="ALL" type="button">All <span id="finding-count-all">0</span></button><button class="filter-tab" data-severity="CRITICAL" type="button">Critical <span id="finding-count-critical">0</span></button><button class="filter-tab" data-severity="HIGH" type="button">High <span id="finding-count-high">0</span></button><button class="filter-tab" data-severity="MEDIUM" type="button">Medium <span id="finding-count-medium">0</span></button><button class="filter-tab" data-severity="LOW" type="button">Low <span id="finding-count-low">0</span></button><button class="filter-tab" data-severity="INFO" type="button">Info <span id="finding-count-info">0</span></button><button class="filter-tab" data-severity="UNKNOWN" type="button">Unknown <span id="finding-count-unknown">0</span></button></div><span class="section-caption" id="finding-run-label">No run selected</span></div>
             <div class="findings-list" id="findings-list"></div>
           </section>
 
           <section class="view" id="view-history" data-view-panel="history">
-            <div class="page-intro"><p class="eyebrow">Keep the trail</p><h2>Scan history</h2><p class="muted">Runs are append-only. A finding disappearing on a later run is shown as verified, never erased from history.</p></div>
+            <div class="page-intro"><p class="eyebrow">Keep the trail</p><h2>Scan history</h2><p class="muted">Runs are append-only. A finding disappearing is only verified after a user marks it fixed and relevant scanner coverage completes successfully.</p></div>
             <div class="history-list" id="history-list"></div>
           </section>
 

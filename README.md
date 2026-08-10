@@ -2,7 +2,7 @@
 
 **A local-first security orchestration layer, pipeline, and Dashboard for AI-assisted software.**
 
-`v0.2.0-alpha` · Early Alpha / Active Development · macOS tested
+`v0.3.0-alpha` · Early Alpha / Active Development · macOS tested
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -29,8 +29,8 @@ It is not a new scanner and it does not replace the upstream projects. It is
 the layer around them that understands project context, coordinates the checks,
 normalizes scanner results into one Unified Finding Schema, and brings findings,
 execution state, run history, and the local Dashboard into one workflow.
-Cross-tool correlation, persistent finding lifecycle, and automated
-fix/rescan workflow remain planned milestones:
+Cross-tool correlation and persistent finding lifecycle are now included;
+automated fix/rescan workflow remains a planned milestone:
 
 1. understands what changed in a repository;
 2. classifies the change and applies safe scanning policies;
@@ -40,7 +40,7 @@ fix/rescan workflow remain planned milestones:
 6. presents the result in a local Dashboard with history and a conservative
    release-gate summary; and
 7. stores scanner-independent Unified Findings for the CLI, Dashboard, reports,
-   and future correlation features.
+   and a project-level correlation and lifecycle index.
 
 The goal is simple: install the security toolkit once, then use the same
 repeatable security workflow in every AI-assisted coding repository.
@@ -50,7 +50,7 @@ repeatable security workflow in every AI-assisted coding repository.
 | | Responsibility |
 | --- | --- |
 | **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
-| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes results into the v1 Unified Finding Schema; records execution state and run history; presents the local Dashboard and reports; and provides a conservative release gate. Correlation, persistent lifecycle, and automated fix/rescan are planned. |
+| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes results into the v1 Unified Finding Schema; correlates compatible evidence; tracks explicit fix and verification lifecycle; records execution state and run history; presents the local Dashboard and reports; and provides a conservative release gate. Automated fix/rescan remains planned. |
 
 Vibe Code Guard does not claim the upstream detection engines as its own work.
 The individual tools remain responsible for their own scanning behavior and
@@ -156,11 +156,12 @@ read several unrelated terminal outputs. It shows:
 - scan history and current run/rescan evidence; and
 - a conservative release-gate summary.
 
-The current Dashboard reads the v1 Unified Finding Schema. It does not yet
-provide cross-tool correlation, a persistent finding lifecycle, or automated
-fix/rescan promised in the roadmap. See the [Unified Finding Schema
-documentation](docs/unified-finding-schema.md) for the field contract and
-compatibility rules.
+The current Dashboard reads the v1 Unified Finding Schema and presents
+correlated issues with scanner observations and explicit lifecycle actions. It
+does not automatically fix code or run a rescan after a fix. See the [Unified
+Finding Schema documentation](docs/unified-finding-schema.md) and [correlation
+and lifecycle documentation](docs/correlation-and-lifecycle.md) for the field
+contracts and compatibility rules.
 
 The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
 require an account or cloud database, and does not upload source code or scan
@@ -314,6 +315,9 @@ Current early-alpha capabilities:
   fingerprints;
 - normalized Dashboard and Markdown report presentation;
 - scanner execution state, run history, and tool health;
+- deterministic cross-scanner correlation, project-level observations, and
+  explicit `OPEN` / `FIXED` / `VERIFIED` / `REOPENED` / `FALSE_POSITIVE` /
+  `ACCEPTED_RISK` lifecycle states;
 - localhost-focused active-testing boundaries; and
 - safe synthetic self-test fixtures.
 
@@ -321,7 +325,7 @@ Planned milestones, not current promises:
 
 - **v0.2 — Unified Findings:** one normalized schema for every scanner result ✅;
 - **v0.3 — Correlation + Lifecycle:** cross-tool deduplication and
-  open/fixed/verified/reopened tracking;
+  open/fixed/verified/reopened tracking ✅;
 - **v0.4 — AI Security Review:** plain-language explanation of what the
   scanners found, including likely false positives;
 - **v0.5 — GitHub PR Review:** PR summaries and findings tied to a pull request;

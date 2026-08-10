@@ -1,6 +1,6 @@
 # Unified Finding Schema v1.0
 
-Vibe Code Guard v0.2 converts scanner-specific results into one stable object
+Vibe Code Guard converts scanner-specific results into one stable object
 before they are shown in the Dashboard, written to a run, counted in a
 summary, or rendered in `security-report.md`.
 
@@ -56,9 +56,9 @@ upstream scanners or change their native output files.
 
 | Field | Meaning |
 | --- | --- |
-| `schemaVersion` | Unified schema version. v0.2 writes `1.0`. |
+| `schemaVersion` | Unified schema version. v0.2 and v0.3 write `1.0`. |
 | `id` | Stable scanner-scoped display identifier. |
-| `fingerprint` | Deterministic identity material for future cross-tool correlation. |
+| `fingerprint` | Deterministic identity material used by the v0.3 correlation layer. |
 | `scanner` | Scanner `id`, display `name`, and optional upstream `ruleId`. |
 | `severity` | `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFO`, or `UNKNOWN`. |
 | `confidence` | `HIGH`, `MEDIUM`, `LOW`, or `UNKNOWN`. |
@@ -68,7 +68,7 @@ upstream scanners or change their native output files.
 | `explanation` | Technical, plain-language, and impact explanations. |
 | `evidence` | Sanitized summary. `redacted` is always `true`. |
 | `remediation` | Sanitized remediation summary, or `null` when upstream provides none. |
-| `status` | Lifecycle value. v0.2 actively creates `OPEN`; later lifecycle work will use the other values. |
+| `status` | Scanner-level status. v0.3 keeps these objects intact and tracks the project-level lifecycle on Correlated Findings. |
 | `firstSeen` / `lastSeen` | ISO timestamps for the observation history. |
 | `source` | Current run identifier and optional safe reference to a raw artifact. |
 
@@ -98,7 +98,7 @@ Fingerprints use scanner rule identity, normalized category/title, normalized
 file or endpoint location, and line information. They deliberately exclude
 timestamps, run IDs, random values, and raw evidence so a later run can refer
 to the same underlying signal. The scanner identifier is kept in `id`, while
-the fingerprint remains suitable for future cross-tool correlation.
+the fingerprint remains suitable for deterministic cross-tool correlation.
 
 Evidence is sanitized before it can be persisted. Credential-shaped values,
 private keys, authorization headers, and fields such as `match`, `raw`,
