@@ -14,10 +14,10 @@ Dashboard.
 usable.**
 
 <p align="center">
-  <img src="diagrams/vibe-code-guard-flow-next-ai-drawio.svg" alt="Vibe Code Guard pipeline: understand changes, select checks, run open-source tools locally, explain findings, fix, and rescan" width="1100" />
+  <img src="diagrams/vibe-code-guard-explainer-next-ai-drawio.svg" alt="Vibe Code Guard explainer: upstream open-source scanning engines feed a local change-aware pipeline, unified evidence, fix and rescan status, history, Dashboard, and release gate" width="1100" />
 </p>
 
-Animation fallback: [view the GIF version](diagrams/vibe-code-guard-overview.gif).
+Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
 
 ## What this project is
 
@@ -310,6 +310,12 @@ Planned milestones, not current promises:
 
 ## Editable architecture diagrams
 
+- [Product explainer: Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
+  [draw.io source](diagrams/vibe-code-guard-explainer.drawio) ·
+  [Mermaid](diagrams/vibe-code-guard-explainer.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-explainer.excalidraw) ·
+  [Next AI Draw.io PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png) ·
+  [Mermaid PNG render](diagrams/vibe-code-guard-explainer.png)
 - [Compact overview GIF](diagrams/vibe-code-guard-overview.gif) ·
   [Mermaid](diagrams/vibe-code-guard-overview.mmd) ·
   [Excalidraw](diagrams/vibe-code-guard-overview.excalidraw)
