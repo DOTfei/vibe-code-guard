@@ -211,7 +211,7 @@ function allFindings() {
 
 function renderFindings() {
   const findings = allFindings();
-  const counts = findings.reduce((result, finding) => { result[finding.severity] = (result[finding.severity] || 0) + 1; result.ALL += 1; return result; }, { ALL: 0, CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 });
+  const counts = findings.reduce((result, finding) => { result[finding.severity] = (result[finding.severity] || 0) + 1; result.ALL += 1; return result; }, { ALL: 0, CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0, UNKNOWN: 0 });
   Object.entries(counts).forEach(([key, value]) => { const el = $(`#finding-count-${key.toLowerCase()}`); if (el) el.textContent = value; });
   $('#finding-run-label').textContent = currentRun() ? `${currentRun().projectName} · ${currentRun().id}` : 'No run selected';
   $$('.filter-tab').forEach((tab) => tab.classList.toggle('is-active', tab.dataset.severity === findingFilter));
@@ -222,9 +222,9 @@ function renderFindings() {
     return;
   }
   container.innerHTML = visible.map((finding) => `<article class="finding-card ${finding.status === 'VERIFIED' ? 'is-verified' : ''}">
-    <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${escapeHTML(finding.scanner)}</span></div><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span></div>
-    <div class="finding-grid"><div class="finding-section"><span>Technical explanation</span><p>${escapeHTML(finding.technical)}</p></div><div class="finding-section"><span>Simple explanation</span><p>${escapeHTML(finding.simple)}</p></div><div class="finding-section"><span>Why it matters</span><p>${escapeHTML(finding.why)}</p></div></div>
-    <div class="finding-footer"><span>${escapeHTML(finding.file || finding.endpoint || 'Location not supplied')}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
+    <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${escapeHTML(finding.scanner?.name || finding.scanner?.id || 'Unknown scanner')}</span></div><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span></div>
+    <div class="finding-grid"><div class="finding-section"><span>Technical explanation</span><p>${escapeHTML(finding.explanation?.technical || 'Not supplied')}</p></div><div class="finding-section"><span>Simple explanation</span><p>${escapeHTML(finding.explanation?.simple || 'Not supplied')}</p></div><div class="finding-section"><span>Why it matters</span><p>${escapeHTML(finding.explanation?.whyItMatters || 'Not supplied')}</p></div></div>
+    <div class="finding-footer"><span>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
   </article>`).join('');
 }
 

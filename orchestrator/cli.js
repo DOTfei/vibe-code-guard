@@ -17,7 +17,7 @@ function parseArgs(argv) {
 
 function humanPlan(plan) {
   const lines = [
-    'Vibe Code Guard v0.1.0-alpha',
+    'Vibe Code Guard v0.2.0-alpha',
     `Target: ${plan.projectPath}`,
     `Change source: ${plan.changeSet.source}`,
     `Categories: ${plan.categories.join(', ')}`,

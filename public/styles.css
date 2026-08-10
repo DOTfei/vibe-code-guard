@@ -229,7 +229,7 @@ code, .mono { font-family: var(--mono); font-size: 0.88em; }
 .finding-title { margin: 0; font-size: 14px; line-height: 1.35; }
 .finding-id { display: block; margin-top: 4px; color: var(--ink-faint); font-family: var(--mono); font-size: 10px; }
 .severity-label { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border-radius: 5px; font-family: var(--mono); font-size: 10px; font-weight: 800; }
-.severity-label--critical, .severity-label--high { color: var(--red); background: var(--red-soft); }.severity-label--medium { color: #8a5a19; background: var(--amber-soft); }.severity-label--low { color: var(--blue); background: var(--blue-soft); }
+.severity-label--critical, .severity-label--high { color: var(--red); background: var(--red-soft); }.severity-label--medium { color: #8a5a19; background: var(--amber-soft); }.severity-label--low, .severity-label--info { color: var(--blue); background: var(--blue-soft); }.severity-label--unknown { color: var(--ink-soft); background: var(--paper-deep); }
 .finding-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 15px; padding-top: 14px; border-top: 1px solid var(--line); }
 .finding-section span { display: block; margin-bottom: 3px; color: var(--ink-faint); font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
 .finding-section p { margin: 0; color: var(--ink-soft); font-size: 11px; }

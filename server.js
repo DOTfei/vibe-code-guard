@@ -7,6 +7,14 @@ const os = require('node:os');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { buildExecutionPlan } = require('./orchestrator');
+const {
+  SCHEMA_VERSION,
+  adaptScannerOutput,
+  countFindings,
+  normalizePersistedFindings,
+  parseJsonLoose,
+  redact,
+} = require('./core/findings');
 
 const ROOT = __dirname;
 const PUBLIC_DIR = path.join(ROOT, 'public');
@@ -84,18 +92,9 @@ function atomicWrite(filePath, value) {
   fs.renameSync(temporary, filePath);
 }
 
-function redact(value) {
-  return String(value || '')
-    .replace(/(sk-(?:proj-)?)[A-Za-z0-9_-]{10,}/g, '$1…[REDACTED]')
-    .replace(/(AKIA)[A-Z0-9]{12,}/g, '$1…[REDACTED]')
-    .replace(/(xox[baprs]-)[A-Za-z0-9-]{10,}/g, '$1…[REDACTED]')
-    .replace(/(gh[pousr]_[A-Za-z0-9_]{8,})/g, 'gh_…[REDACTED]')
-    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]{12,}/gi, '$1[REDACTED]')
-    .replace(/((?:password|secret|token|api[_-]?key|private[_-]?key)\s*[:=]\s*["']?)[^\s"']{8,}/gi, '$1[REDACTED]');
-}
-
 function writeEvent(run, event) {
   const safeEvent = {
+    schemaVersion: SCHEMA_VERSION,
     timestamp: isoNow(),
     ...event,
     message: redact(event.message || ''),
@@ -107,7 +106,9 @@ function writeEvent(run, event) {
 }
 
 function saveRun(run) {
+  const persistedFindings = [...run.findings, ...run.resolvedFindings];
   const metadata = {
+    schemaVersion: SCHEMA_VERSION,
     id: run.id,
     projectName: run.projectName,
     projectPath: run.projectPath,
@@ -126,6 +127,9 @@ function saveRun(run) {
     dataDir: DATA_DIR,
   };
   atomicWrite(path.join(run.dir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'findings.json'), `${JSON.stringify(persistedFindings, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'tool-status.json'), `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, tools: run.tools }, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ schemaVersion: SCHEMA_VERSION, summary: run.summary, releaseGate: run.releaseGate, status: run.status }, null, 2)}\n`);
 }
 
 function createStages() {
@@ -199,14 +203,13 @@ function createRun({ projectPath, mode, webTarget }) {
     findings: [],
     resolvedFindings: [],
     events: [],
-    summary: { critical: 0, high: 0, medium: 0, low: 0, total: 0 },
+    summary: { critical: 0, high: 0, medium: 0, low: 0, info: 0, unknown: 0, total: 0 },
     releaseGate: { label: 'DO NOT DEPLOY', reason: 'Assessment is still running.' },
     processes: new Set(),
     abortRequested: false,
   };
   runs.set(id, run);
   fs.writeFileSync(path.join(dir, 'events.jsonl'), '', 'utf8');
-  atomicWrite(path.join(dir, 'findings.json'), '[]\n');
   saveRun(run);
   writeEvent(run, { kind: 'scan-started', message: `Scan started: ${run.mode} audit for ${run.projectName}` });
   return run;
@@ -250,183 +253,13 @@ function resolveBinary(name) {
     : name;
 }
 
-function parseJsonLoose(text) {
-  const value = String(text || '').trim();
-  if (!value) return null;
-  try {
-    return JSON.parse(value);
-  } catch {
-    const firstObject = value.indexOf('{');
-    const lastObject = value.lastIndexOf('}');
-    if (firstObject >= 0 && lastObject > firstObject) {
-      try { return JSON.parse(value.slice(firstObject, lastObject + 1)); } catch { /* continue */ }
-    }
-    const firstArray = value.indexOf('[');
-    const lastArray = value.lastIndexOf(']');
-    if (firstArray >= 0 && lastArray > firstArray) {
-      try { return JSON.parse(value.slice(firstArray, lastArray + 1)); } catch { /* continue */ }
-    }
-  }
-  return null;
-}
-
-function normalizeSeverity(value, fallback = 'MEDIUM') {
-  const severity = String(value || '').toUpperCase();
-  if (severity.includes('CRITICAL')) return 'CRITICAL';
-  if (severity.includes('HIGH') || severity === 'ERROR') return 'HIGH';
-  if (severity.includes('MEDIUM') || severity === 'WARNING') return 'MEDIUM';
-  if (severity.includes('LOW')) return 'LOW';
-  return fallback;
-}
-
-function findingId(scanner, file, title) {
-  const hash = crypto.createHash('sha256').update(`${scanner}|${file || ''}|${title || ''}`).digest('hex').slice(0, 10);
-  return `${scanner.toUpperCase()}-${hash}`;
-}
-
-function makeFinding(run, { scanner, severity, title, category, file, endpoint, technical, simple, why }) {
-  const item = {
-    id: findingId(scanner, file || endpoint, title),
-    severity: normalizeSeverity(severity),
-    scanner,
-    category: category || 'Security finding',
-    title: redact(title),
-    file: redact(file || ''),
-    endpoint: redact(endpoint || ''),
-    technical: redact(technical || title),
-    simple: redact(simple || 'This may allow an unsafe action or expose information if it is reachable.'),
-    why: redact(why || 'The issue can increase the chance of unauthorized access, data exposure, or unsafe execution.'),
-    status: 'OPEN',
-    firstSeen: run.id,
-    lastSeen: run.id,
-    history: [{ runId: run.id, status: 'OPEN', severity: normalizeSeverity(severity) }],
-  };
-  return item;
-}
-
-function parseGitleaks(text, run) {
-  const data = parseJsonLoose(text);
-  if (!Array.isArray(data)) return [];
-  return data.map((item) => makeFinding(run, {
-    scanner: 'gitleaks', severity: 'HIGH', category: 'Secret exposure',
-    title: item.Description || item.RuleID || 'Potential secret detected',
-    file: `${item.File || 'unknown'}${item.StartLine ? `:${item.StartLine}` : ''}`,
-    technical: `Secret detector rule ${item.RuleID || 'matched'} reported a credential-like value. The value is intentionally redacted.`,
-    simple: 'A credential-like value may be inside the project and could be reused by someone who gets the code.',
-    why: 'Secrets committed to source or build output may grant access to external services. Rotate real credentials if this is not synthetic.',
-  }));
-}
-
-function parseTrufflehog(text, run) {
-  const findings = [];
-  for (const line of String(text || '').split('\n')) {
-    const item = parseJsonLoose(line);
-    if (!item || !item.DetectorName) continue;
-    const file = item.SourceMetadata?.Data?.Filesystem?.file || 'unknown';
-    findings.push(makeFinding(run, {
-      scanner: 'trufflehog', severity: 'HIGH', category: 'Secret exposure',
-      title: `${item.DetectorName} credential detected`, file,
-      technical: `TruffleHog identified a ${item.DetectorName} detector match. The credential value is redacted.`,
-      simple: 'This file looks like it contains a credential that should not be reachable by the project.',
-      why: 'A valid credential can allow unauthorized access. Treat real matches as incidents and rotate them.',
-    }));
-  }
-  return findings;
-}
-
-function parseSemgrep(text, run) {
-  const data = parseJsonLoose(text);
-  const results = Array.isArray(data?.results) ? data.results : [];
-  return results.map((item) => {
-    const message = item.extra?.message || item.check_id || 'Potential insecure code pattern';
-    const file = `${item.path || 'unknown'}${item.start?.line ? `:${item.start.line}` : ''}`;
-    return makeFinding(run, {
-      scanner: 'semgrep', severity: item.extra?.severity, category: 'Static analysis', title: message, file,
-      technical: `${item.check_id || 'Semgrep rule'}: ${message}`,
-      simple: 'A code pattern may let untrusted input cross a security boundary without enough checking.',
-      why: 'The actual impact depends on reachability and data flow, so this needs review and a focused fix or documented false-positive decision.',
-    });
-  });
-}
-
-function parseTrivy(text, run) {
-  const data = parseJsonLoose(text);
-  const findings = [];
-  for (const result of data?.Results || []) {
-    for (const item of result.Vulnerabilities || []) {
-      findings.push(makeFinding(run, {
-        scanner: 'trivy', severity: item.Severity, category: 'Dependency vulnerability',
-        title: `${item.VulnerabilityID || 'Vulnerability'}: ${item.Title || item.PkgName || 'vulnerable dependency'}`,
-        file: result.Target || item.PkgName || 'dependency manifest',
-        technical: `${item.PkgName || 'Package'} ${item.InstalledVersion || ''} is associated with ${item.VulnerabilityID || 'a known vulnerability'}${item.FixedVersion ? `; fixed in ${item.FixedVersion}` : ''}.`,
-        simple: 'A third-party component used by this project has a published security issue.',
-        why: item.FixedVersion ? `Upgrade or otherwise remove the affected path. A fixed version is available: ${item.FixedVersion}.` : 'Check the advisory and determine whether this component is reachable in the shipped artifact.',
-      }));
-    }
-  }
-  return findings;
-}
-
-function parseOsv(text, run) {
-  const data = parseJsonLoose(text);
-  const findings = [];
-  for (const result of data?.results || []) {
-    for (const pkg of result.packages || []) {
-      for (const vuln of pkg.vulnerabilities || []) {
-        findings.push(makeFinding(run, {
-          scanner: 'osv-scanner', severity: vuln.database_specific?.severity || vuln.severity?.[0]?.score, category: 'Dependency vulnerability',
-          title: `${vuln.id || 'OSV finding'}: ${vuln.summary || 'Known dependency vulnerability'}`,
-          file: result.source?.path || pkg.package?.name || 'dependency manifest',
-          technical: `${pkg.package?.name || 'Package'} ${pkg.package?.version || ''} matched ${vuln.id || 'an OSV advisory'}.`,
-          simple: 'The project uses a dependency version that a public vulnerability database has flagged.',
-          why: 'Independent dependency evidence helps confirm whether an upgrade or compensating control is needed.',
-        }));
-      }
-    }
-  }
-  return findings;
-}
-
-function parseCheckov(text, run) {
-  const data = parseJsonLoose(text);
-  const failed = data?.results?.failed_checks || [];
-  return failed.map((item) => makeFinding(run, {
-    scanner: 'checkov', severity: item.severity, category: 'Infrastructure configuration',
-    title: `${item.check_id || 'IaC check'}: ${item.check_name || 'Configuration issue'}`,
-    file: `${item.file_path || 'infrastructure'}${item.file_line_range ? `:${item.file_line_range.join('-')}` : ''}`,
-    technical: item.check_name || 'Checkov reported a failed infrastructure security check.',
-    simple: 'A deployment or infrastructure setting may be more exposed than intended.',
-    why: item.guideline || 'Infrastructure defaults can turn a small application mistake into a broad exposure.',
-  }));
-}
-
-function parseNuclei(text, run) {
-  const findings = [];
-  for (const line of String(text || '').split('\n')) {
-    const item = parseJsonLoose(line);
-    if (!item || !item.info) continue;
-    findings.push(makeFinding(run, {
-      scanner: 'nuclei', severity: item.info.severity, category: 'Local web runtime',
-      title: item.info.name || item['template-id'] || 'Nuclei detection',
-      endpoint: item['matched-at'] || item.host || 'authorized local target',
-      technical: `${item['template-id'] || 'Nuclei template'} matched the authorized local target.`,
-      simple: 'A runtime check found a web behavior worth reviewing on the local test target.',
-      why: item.info.description || 'Runtime findings can reveal issues that source-only scanners do not see.',
-    }));
-  }
-  return findings;
-}
-
 function parserFor(tool) {
-  return {
-    gitleaks: parseGitleaks,
-    trufflehog: parseTrufflehog,
-    semgrep: parseSemgrep,
-    trivy: parseTrivy,
-    'osv-scanner': parseOsv,
-    checkov: parseCheckov,
-    nuclei: parseNuclei,
-  }[tool];
+  return (text, run) => adaptScannerOutput(tool, text, {
+    runId: run.id,
+    startedAt: run.startedAt,
+    observedAt: run.finishedAt || isoNow(),
+    projectPath: run.projectPath,
+  });
 }
 
 function updateToolVersion(tool) {
@@ -477,8 +310,9 @@ function executeScanner(run, { tool, stage, args, outputName, parser, reportPath
       const output = `${safeStdout}${safeStderr ? `\n${safeStderr}` : ''}`;
       if (outputName) atomicWrite(path.join(run.dir, outputName), output);
       if (reportPath && fs.existsSync(reportPath)) atomicWrite(reportPath, redact(parserInput));
-      const findings = parser ? parser(parserInput, run) : [];
+      const findings = (parser || parserFor(tool))(parserInput, run);
       run.findings.push(...findings);
+      run.summary = countFindings(run.findings);
       meta.findingsCount = findings.length;
       meta.exitCode = exitCode;
       meta.durationMs = Date.now() - started;
@@ -567,15 +401,6 @@ function hasInfrastructure(projectPath) {
   } catch { return false; }
 }
 
-function countFindings(findings) {
-  return findings.reduce((counts, finding) => {
-    const key = String(finding.severity || 'LOW').toLowerCase();
-    counts[key] = (counts[key] || 0) + 1;
-    counts.total += 1;
-    return counts;
-  }, { critical: 0, high: 0, medium: 0, low: 0, total: 0 });
-}
-
 function readPreviousFindings(projectPath, currentId) {
   const all = [];
   for (const entry of fs.readdirSync(DATA_DIR, { withFileTypes: true })) {
@@ -583,8 +408,13 @@ function readPreviousFindings(projectPath, currentId) {
     try {
       const metadata = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'metadata.json'), 'utf8'));
       if (metadata.projectPath !== projectPath) continue;
-      const findings = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'findings.json'), 'utf8'));
-      all.push(...findings.map((item) => ({ ...item, previousRunId: entry.name })));
+      const rawFindings = JSON.parse(fs.readFileSync(path.join(DATA_DIR, entry.name, 'findings.json'), 'utf8'));
+      all.push(...normalizePersistedFindings(rawFindings, {
+        runId: entry.name,
+        projectPath,
+        startedAt: metadata.startedAt,
+        observedAt: metadata.finishedAt || metadata.startedAt,
+      }));
     } catch { /* ignore incomplete prior runs */ }
   }
   return all;
@@ -604,10 +434,10 @@ function finalizeFindings(run) {
   const previous = readPreviousFindings(run.projectPath, run.id);
   const previousById = new Map(previous.map((finding) => [finding.id, finding]));
   for (const finding of run.findings) {
+    finding.lastSeen = run.finishedAt || finding.lastSeen;
     const old = previousById.get(finding.id);
     if (old) {
-      finding.firstSeen = old.firstSeen || old.previousRunId;
-      finding.history = [...(old.history || []), { runId: run.id, status: 'OPEN', severity: finding.severity }];
+      finding.firstSeen = old.firstSeen || finding.firstSeen;
     }
   }
   for (const old of previousById.values()) {
@@ -615,27 +445,37 @@ function finalizeFindings(run) {
       run.resolvedFindings.push({
         ...old,
         status: 'VERIFIED',
-        lastSeen: run.id,
-        resolvedInRun: run.id,
-        history: [...(old.history || []), { runId: run.id, status: 'VERIFIED', severity: old.severity }],
+        lastSeen: run.finishedAt || isoNow(),
+        source: { ...old.source, runId: old.source?.runId || run.id },
       });
     }
   }
   run.summary = countFindings(run.findings);
-  atomicWrite(path.join(run.dir, 'findings.json'), `${JSON.stringify([...run.findings, ...run.resolvedFindings], null, 2)}\n`);
 }
 
 function buildReport(run) {
   const all = [...run.findings, ...run.resolvedFindings];
+  const overallRisk = run.summary.critical || run.summary.high
+    ? 'HIGH'
+    : run.summary.medium
+      ? 'MEDIUM'
+      : run.summary.low
+        ? 'LOW'
+        : run.summary.unknown
+          ? 'UNKNOWN'
+          : run.summary.info
+            ? 'INFO'
+            : 'LOW';
   const lines = [
     '# Security Assessment', '',
     '## Executive Summary', '',
     `- Project: ${redact(run.projectName)}`,
     `- Path: ${redact(run.projectPath)}`,
     `- Date: ${run.startedAt}`,
+    `- Unified Finding Schema: ${SCHEMA_VERSION}`,
     `- Scan Mode: ${run.mode}`,
     `- Stack: ${run.stack.join(', ') || 'Unknown'}`,
-    `- Overall Risk: ${run.summary.critical || run.summary.high ? 'HIGH' : run.summary.medium ? 'MEDIUM' : 'LOW'}`,
+    `- Overall Risk: ${overallRisk}`,
     `- Release Decision: ${run.releaseGate.label}`,
     '', '## Scanner Status', '',
     '| Tool | Status | Findings | Exit code |', '| --- | --- | ---: | ---: |',
@@ -645,13 +485,15 @@ function buildReport(run) {
   if (!all.length) lines.push('No findings were parsed from the scanners that ran.', '');
   for (const finding of all) {
     lines.push(`### ${finding.id} — ${finding.severity}`, '',
-      `- Scanner: ${finding.scanner}`,
+      `- Scanner: ${finding.scanner.name}`,
       `- Category: ${finding.category}`,
-      `- Location: ${finding.file || finding.endpoint || 'Not specified'}`,
+      `- Location: ${finding.location.file || finding.location.endpoint || 'Not specified'}`,
       `- Title: ${finding.title}`,
-      `- Technical explanation: ${finding.technical}`,
-      `- Simple explanation: ${finding.simple}`,
-      `- Why it matters: ${finding.why}`,
+      `- Technical explanation: ${finding.explanation.technical}`,
+      `- Simple explanation: ${finding.explanation.simple}`,
+      `- Why it matters: ${finding.explanation.whyItMatters}`,
+      `- Evidence: ${finding.evidence.summary}`,
+      `- Remediation: ${finding.remediation.summary || 'Review and document the appropriate fix.'}`,
       `- Status: ${finding.status}`, '');
   }
   lines.push('## Remaining Risks', '', '- Manual security review is not automated by this dashboard.', '- A clean scanner result does not prove the project is perfectly secure.', '');
@@ -659,6 +501,7 @@ function buildReport(run) {
 }
 
 function finishRun(run) {
+  run.finishedAt = run.finishedAt || isoNow();
   finalizeFindings(run);
   const unresolvedHigh = run.summary.critical + run.summary.high;
   const toolErrors = Object.values(run.tools).filter((tool) => tool.status === 'ERROR' || (tool.status === 'FAIL' && tool.findingsCount === 0 && (tool.exitCode || 0) > 1)).length;
@@ -670,7 +513,6 @@ function finishRun(run) {
   else if (incompleteAssessment) run.releaseGate = { label: 'DO NOT DEPLOY', reason: 'The performed assessment still has skipped runtime or manual review stages.' };
   else run.releaseGate = { label: 'READY TO DEPLOY', reason: 'No known Critical/High findings detected by the performed assessment.' };
   run.status = run.abortRequested ? 'STOPPED' : unresolvedHigh > 0 || toolErrors > 0 ? 'FAIL' : incompleteAssessment || run.summary.total > 0 ? 'PASS WITH WARNINGS' : 'PASS';
-  run.finishedAt = isoNow();
   run.currentStage = 'decision';
   run.stages.decision.status = run.status === 'FAIL' ? 'FAIL' : run.status === 'PASS' ? 'PASS' : 'WARNING';
   run.stages.decision.finishedAt = run.finishedAt;
@@ -733,18 +575,18 @@ async function runPlannedAudit(run) {
   };
 
   await executeStage('secrets', [
-    { tool: 'gitleaks', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')], outputName: 'gitleaks-output.txt', parser: parseGitleaks, reportPath: path.join(run.dir, 'gitleaks-report.json') },
-    { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: parseTrufflehog },
+    { tool: 'gitleaks', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')], outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json') },
+    { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: null },
   ]);
   await executeStage('static', [
-    { tool: 'semgrep', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json', parser: parseSemgrep },
+    { tool: 'semgrep', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json', parser: null },
   ]);
 
   const categories = new Set(run.orchestration.categories);
   if (categories.has('DEPENDENCY_CHANGE')) {
     await executeStage('dependencies', [
-      { tool: 'osv-scanner', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json', parser: parseOsv },
-      { tool: 'trivy', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json', parser: parseTrivy },
+      { tool: 'osv-scanner', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json', parser: null },
+      { tool: 'trivy', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json', parser: null },
     ]);
   } else {
     skipStage(run, 'dependencies', plannedStageNote(run, ['osv-scanner', 'trivy']));
@@ -752,8 +594,8 @@ async function runPlannedAudit(run) {
 
   if (categories.has('IAC_CHANGE') || categories.has('CONTAINER_CHANGE')) {
     await executeStage('infrastructure', [
-      { tool: 'checkov', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json', parser: parseCheckov },
-      { tool: 'trivy', args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath], outputName: 'trivy-config-output.json', parser: parseTrivy },
+      { tool: 'checkov', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json', parser: null },
+      { tool: 'trivy', args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath], outputName: 'trivy-config-output.json', parser: null },
     ]);
   } else {
     skipStage(run, 'infrastructure', plannedStageNote(run, ['checkov', 'trivy']));
@@ -765,10 +607,10 @@ async function runPlannedAudit(run) {
     if (!target) skipStage(run, 'web', 'The automatic plan selected runtime checks, but no authorized localhost target is available.');
     else {
       stageStart(run, 'web');
-      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl', parser: parseNuclei });
+      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl', parser: null });
       if (webTools.includes('zap')) {
         const zapPath = resolveBinary('zap');
-        if (zapPath !== 'zap' && fs.existsSync(zapPath)) await executeScanner(run, { tool: 'zap', stage: 'web', args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.html'), '-quickprogress'], outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.html') });
+        if (zapPath !== 'zap' && fs.existsSync(zapPath)) await executeScanner(run, { tool: 'zap', stage: 'web', args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.json') });
         else {
           run.tools.zap.status = 'SKIPPED';
           writeEvent(run, { kind: 'tool-skipped', stage: 'web', tool: 'zap', message: 'OWASP ZAP binary was not found.' });
@@ -804,12 +646,12 @@ async function runAudit(run) {
     await executeScanner(run, {
       tool: 'gitleaks', stage: 'secrets',
       args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')],
-      outputName: 'gitleaks-output.txt', parser: parseGitleaks, reportPath: path.join(run.dir, 'gitleaks-report.json'),
+      outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json'),
     });
     await executeScanner(run, {
       tool: 'trufflehog', stage: 'secrets',
       args: ['filesystem', run.projectPath, '--no-verification', '--json'],
-      outputName: 'trufflehog-output.jsonl', parser: parseTrufflehog,
+      outputName: 'trufflehog-output.jsonl', parser: null,
     });
     stageFinish(run, 'secrets', [run.tools.gitleaks, run.tools.trufflehog].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
 
@@ -817,7 +659,7 @@ async function runAudit(run) {
     await executeScanner(run, {
       tool: 'semgrep', stage: 'static',
       args: ['scan', '--config=p/security-audit', run.projectPath, '--json'],
-      outputName: 'semgrep-output.json', parser: parseSemgrep,
+      outputName: 'semgrep-output.json', parser: null,
     });
     stageFinish(run, 'static', run.tools.semgrep.status === 'ERROR' || run.tools.semgrep.status === 'FAIL' ? 'FAIL' : 'PASS');
 
@@ -825,12 +667,12 @@ async function runAudit(run) {
     await executeScanner(run, {
       tool: 'osv-scanner', stage: 'dependencies',
       args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath],
-      outputName: 'osv-output.json', parser: parseOsv,
+      outputName: 'osv-output.json', parser: null,
     });
     await executeScanner(run, {
       tool: 'trivy', stage: 'dependencies',
       args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath],
-      outputName: 'trivy-output.json', parser: parseTrivy,
+      outputName: 'trivy-output.json', parser: null,
     });
     stageFinish(run, 'dependencies', [run.tools['osv-scanner'], run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
 
@@ -839,12 +681,12 @@ async function runAudit(run) {
       await executeScanner(run, {
         tool: 'checkov', stage: 'infrastructure',
         args: ['-d', run.projectPath, '--output', 'json'],
-        outputName: 'checkov-output.json', parser: parseCheckov,
+        outputName: 'checkov-output.json', parser: null,
       });
       await executeScanner(run, {
         tool: 'trivy', stage: 'infrastructure',
         args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath],
-        outputName: 'trivy-config-output.json', parser: parseTrivy,
+        outputName: 'trivy-config-output.json', parser: null,
       });
       stageFinish(run, 'infrastructure', [run.tools.checkov, run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
     } else skipStage(run, 'infrastructure', run.mode === 'quick' ? 'Quick mode keeps infrastructure scanning out of the frequent loop.' : 'No supported infrastructure files detected.');
@@ -855,14 +697,14 @@ async function runAudit(run) {
       await executeScanner(run, {
         tool: 'nuclei', stage: 'web',
         args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'],
-        outputName: 'nuclei-output.jsonl', parser: parseNuclei,
+        outputName: 'nuclei-output.jsonl', parser: null,
       });
       const zapPath = resolveBinary('zap');
       if (zapPath !== 'zap' && fs.existsSync(zapPath)) {
         await executeScanner(run, {
           tool: 'zap', stage: 'web',
-          args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.html'), '-quickprogress'],
-          outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.html'),
+          args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.json'), '-quickprogress'],
+          outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.json'),
         });
       } else {
         run.tools.zap.status = 'SKIPPED';
@@ -902,9 +744,27 @@ function hydrateRun(id) {
   const dir = path.join(DATA_DIR, id);
   try {
     const metadata = JSON.parse(fs.readFileSync(path.join(dir, 'metadata.json'), 'utf8'));
-    const findings = JSON.parse(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'));
-    const events = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
-    const run = { ...metadata, dir, findings: findings.filter((item) => item.status !== 'VERIFIED'), resolvedFindings: findings.filter((item) => item.status === 'VERIFIED'), events, processes: new Set(), abortRequested: false };
+    const rawFindings = JSON.parse(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'));
+    const persistedFindings = normalizePersistedFindings(rawFindings, {
+      runId: id,
+      projectPath: metadata.projectPath,
+      startedAt: metadata.startedAt,
+      observedAt: metadata.finishedAt || metadata.startedAt,
+    });
+    const events = fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map((line) => ({ schemaVersion: SCHEMA_VERSION, ...JSON.parse(line) }));
+    const findings = persistedFindings.filter((item) => item.status !== 'VERIFIED');
+    const resolvedFindings = persistedFindings.filter((item) => item.status === 'VERIFIED');
+    const run = {
+      ...metadata,
+      schemaVersion: metadata.schemaVersion || SCHEMA_VERSION,
+      dir,
+      findings,
+      resolvedFindings,
+      summary: countFindings(findings),
+      events,
+      processes: new Set(),
+      abortRequested: false,
+    };
     try {
       const lock = JSON.parse(fs.readFileSync(path.join(TOOLKIT_HOME, 'security-toolchain.lock'), 'utf8'));
       for (const [toolId, tool] of Object.entries(lock.tools || {})) if (run.tools?.[toolId] && !run.tools[toolId].version) run.tools[toolId].version = tool.version || null;
