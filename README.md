@@ -308,18 +308,20 @@ Planned milestones, not current promises:
 - **v0.5 — Quality + Reliability:** lint, typecheck, build, and test signals;
 - **v1.0 — Stable release:** after broader testing, review, and documentation.
 
-## Editable architecture diagrams
+## Product explainer and implementation diagrams
 
-- [Product explainer: Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
+The first diagram is the README's main product explanation. It shows the
+division of responsibility between Vibe Code Guard and the upstream scanning
+engines, plus the workflow outputs users see.
+
+- **Main product explainer:** [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
   [draw.io source](diagrams/vibe-code-guard-explainer.drawio) ·
   [Mermaid](diagrams/vibe-code-guard-explainer.mmd) ·
   [Excalidraw](diagrams/vibe-code-guard-explainer.excalidraw) ·
   [Next AI Draw.io PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png) ·
   [Mermaid PNG render](diagrams/vibe-code-guard-explainer.png)
-- [Compact overview GIF](diagrams/vibe-code-guard-overview.gif) ·
-  [Mermaid](diagrams/vibe-code-guard-overview.mmd) ·
-  [Excalidraw](diagrams/vibe-code-guard-overview.excalidraw)
-- [Detailed flow GIF](diagrams/vibe-code-guard-flow.gif) ·
+
+- **Detailed implementation flow:** [GIF](diagrams/vibe-code-guard-flow.gif) ·
   [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-flow-next-ai-drawio.svg) ·
   [draw.io source](diagrams/vibe-code-guard-flow.drawio) ·
   [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
