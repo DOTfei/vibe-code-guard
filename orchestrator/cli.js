@@ -17,7 +17,7 @@ function parseArgs(argv) {
 
 function humanPlan(plan) {
   const lines = [
-    'Security Orchestrator v1',
+    'Vibe Code Guard v0.1.0-alpha',
     `Target: ${plan.projectPath}`,
     `Change source: ${plan.changeSet.source}`,
     `Categories: ${plan.categories.join(', ')}`,
@@ -39,7 +39,7 @@ function humanPlan(plan) {
 function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
-    console.log('Usage: security-orchestrator --target <project> [--web-target http://127.0.0.1:3000] [--json]');
+    console.log('Usage: node orchestrator/cli.js --target <project> [--web-target http://127.0.0.1:3000] [--json]');
     return 0;
   }
   const target = path.resolve(options.target || '.');

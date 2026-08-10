@@ -27,8 +27,10 @@ tools into one understandable local workflow for AI-generated and
 
 It is not a new scanner and it does not replace the upstream projects. It is
 the layer around them that understands project context, coordinates the checks,
-and brings findings, fix/rescan status, history, and the local Dashboard into
-one workflow:
+and brings scanner results, execution state, run history, and the local
+Dashboard into one workflow. A formal Unified Finding Schema, cross-tool
+correlation, persistent finding lifecycle, and automated fix/rescan workflow
+are planned milestones:
 
 1. understands what changed in a repository;
 2. classifies the change and applies safe scanning policies;
@@ -46,7 +48,7 @@ repeatable security workflow in every AI-assisted coding repository.
 | | Responsibility |
 | --- | --- |
 | **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
-| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes execution results; tracks fix and rescan status; provides the local Dashboard; and provides a conservative release gate. |
+| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; parses scanner output into a basic common Dashboard presentation; records execution state and run history; and provides a conservative release gate. Formal finding schema, correlation, persistent lifecycle, and automated fix/rescan are planned. |
 
 Vibe Code Guard does not claim the upstream detection engines as its own work.
 The individual tools remain responsible for their own scanning behavior and
@@ -85,13 +87,14 @@ The core toolkit covers several independent detection layers:
 | Security layer | Open-source tool | What it contributes | License |
 | --- | --- | --- | --- |
 | Secrets | [Gitleaks](https://github.com/gitleaks/gitleaks) | Detects likely secrets in source and Git history | [MIT](https://raw.githubusercontent.com/gitleaks/gitleaks/master/LICENSE) |
-| Secrets | [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Searches for credentials and verifies exposed secrets where supported | [AGPL-3.0](https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE) |
+| Secrets | [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Searches for credentials and verifies exposed secrets where supported | [GNU AGPL v3 — see upstream LICENSE](https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE) |
 | Static analysis | [Semgrep](https://github.com/semgrep/semgrep) | Finds insecure code patterns using configurable rules | [LGPL-2.1](https://raw.githubusercontent.com/semgrep/semgrep/develop/LICENSE) |
 | Vulnerabilities and config | [Trivy](https://github.com/aquasecurity/trivy) | Scans dependencies, filesystems, containers, secrets, and configuration | [Apache-2.0](https://raw.githubusercontent.com/aquasecurity/trivy/main/LICENSE) |
 | Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Matches supported dependency manifests and lockfiles to OSV vulnerabilities | [Apache-2.0](https://raw.githubusercontent.com/google/osv-scanner/main/LICENSE) |
 | Infrastructure as code | [Checkov](https://github.com/bridgecrewio/checkov) | Checks Terraform, Dockerfiles, Kubernetes, and other IaC policies | [Apache-2.0](https://raw.githubusercontent.com/bridgecrewio/checkov/main/LICENSE) |
 | Authorized web testing | [OWASP ZAP](https://github.com/zaproxy/zaproxy) | Dynamic web application testing for authorized local/test targets | [Apache-2.0](https://raw.githubusercontent.com/zaproxy/zaproxy/main/LICENSE) |
 | Authorized template detection | [Nuclei](https://github.com/projectdiscovery/nuclei) | Template-driven detection against explicitly authorized targets | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei/main/LICENSE.md) |
+| Detection content | [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates) | Community-curated detection content used by Nuclei | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/LICENSE.md) |
 | Optional agentic testing | [Strix](https://github.com/usestrix/strix) | Explicitly authorized deep testing and exploit validation | [Apache-2.0](https://raw.githubusercontent.com/usestrix/strix/main/LICENSE) |
 
 Strix is not part of the deterministic eight-tool core health gate and is
@@ -118,9 +121,11 @@ apply policy and choose relevant checks
        ↓
 run local upstream scanners
        ↓
-normalize execution state and explain findings
+parse the current run and explain findings
        ↓
-fix → regression test → targeted rescan
+record execution state and run history
+       ↓
+planned: fix → regression test → targeted rescan
        ↓
 human review and conservative release gate
 ```
@@ -146,8 +151,12 @@ read several unrelated terminal outputs. It shows:
 - installed tool and toolchain health;
 - findings and their evidence;
 - explicit skip and not-applicable reasons;
-- scan history and verified fixes after a later rescan; and
+- scan history and current run/rescan evidence; and
 - a conservative release-gate summary.
+
+The current Dashboard provides basic normalized presentation and history. It
+does not yet provide the formal Unified Finding Schema, cross-tool correlation,
+or a persistent finding lifecycle promised in the roadmap.
 
 The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
 require an account or cloud database, and does not upload source code or scan
@@ -270,7 +279,8 @@ machine-readable metadata, and
 [`security-toolchain.lock`](security-toolchain.lock) for the tracked toolchain
 record.
 
-Important licensing boundary: TruffleHog is AGPL-3.0 and Semgrep is LGPL-2.1.
+Important licensing boundary: TruffleHog is described here as “GNU AGPL v3 —
+see upstream LICENSE” and Semgrep as LGPL-2.1.
 If this project ever bundles, links to, modifies, embeds, packages, or
 redistributes any upstream tool, rule, template, database, add-on, or
 dependency, the licensing analysis must be repeated and the applicable notices
@@ -296,7 +306,8 @@ Current early-alpha capabilities:
 - deterministic change detection, risk classification, policy evaluation, and
   tool selection;
 - `quick`, `full`, and change-aware `auto` plans;
-- local Dashboard with execution state, findings, history, and tool health;
+- basic scanner output parsing and normalized Dashboard presentation;
+- scanner execution state, run history, and tool health;
 - localhost-focused active-testing boundaries; and
 - safe synthetic self-test fixtures.
 

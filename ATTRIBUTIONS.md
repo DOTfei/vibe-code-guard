@@ -1,6 +1,6 @@
 # Attributions
 
-Security Orchestrator is built around established open-source projects. We
+Vibe Code Guard is built around established open-source projects. We
 thank their maintainers and contributors:
 
 - [Gitleaks](https://github.com/gitleaks/gitleaks) — secret detection.
@@ -17,6 +17,8 @@ thank their maintainers and contributors:
   testing.
 - [Nuclei](https://github.com/projectdiscovery/nuclei) — template-driven
   authorized detection.
+- [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates) —
+  separately maintained detection content for Nuclei.
 - [Strix](https://github.com/usestrix/strix) — optional agentic security
   testing integration.
 
