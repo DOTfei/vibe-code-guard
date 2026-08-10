@@ -302,11 +302,21 @@ Current early-alpha capabilities:
 
 Planned milestones, not current promises:
 
-- **v0.2 — Unified Findings:** richer normalized finding schema;
-- **v0.3 — Correlation + Coverage:** cross-tool deduplication and coverage;
-- **v0.4 — AI Fix Loop:** controlled fix, regression test, and targeted rescan;
-- **v0.5 — Quality + Reliability:** lint, typecheck, build, and test signals;
-- **v1.0 — Stable release:** after broader testing, review, and documentation.
+- **v0.2 — Unified Findings:** one normalized schema for every scanner result;
+- **v0.3 — Correlation + Lifecycle:** cross-tool deduplication and
+  open/fixed/verified/reopened tracking;
+- **v0.4 — AI Security Review:** plain-language explanation of what the
+  scanners found, including likely false positives;
+- **v0.5 — GitHub PR Review:** PR summaries and findings tied to a pull request;
+- **v0.6 — Fix → Rescan Automation:** controlled fix, regression test, and
+  targeted rescan;
+- **v0.7 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
+- **v1.0 — Stable Security Review Platform:** after broader testing, review,
+  and documentation.
+
+Vibe Code Guard's own scope remains the orchestration flow, not the scanners.
+Every roadmap item above is a workflow or presentation layer on top of
+independently maintained upstream projects.
 
 ## Product explainer and implementation diagrams
 
