@@ -4,7 +4,14 @@
 
 `v0.1.0-alpha` · Early Alpha / Active Development · macOS tested
 
-> AI can produce code in seconds. Security review should not become the bottleneck—or disappear from the workflow.
+AI coding is fast. Security tooling is fragmented.
+
+Vibe Code Guard does not invent a new vulnerability scanning engine. It brings
+existing open-source security tools into one local, change-aware pipeline and
+Dashboard.
+
+**The scanners find the problems. Vibe Code Guard makes the security workflow
+usable.**
 
 <p align="center">
   <img src="diagrams/vibe-code-guard-flow-next-ai-drawio.svg" alt="Vibe Code Guard pipeline: understand changes, select checks, run open-source tools locally, explain findings, fix, and rescan" width="1100" />
@@ -18,8 +25,10 @@ Vibe Code Guard combines the capabilities of established open-source security
 tools into one understandable local workflow for AI-generated and
 “vibe-coded” projects.
 
-It is not another scanner and it does not replace the upstream projects. It is
-the layer around them that:
+It is not a new scanner and it does not replace the upstream projects. It is
+the layer around them that understands project context, coordinates the checks,
+and brings findings, fix/rescan status, history, and the local Dashboard into
+one workflow:
 
 1. understands what changed in a repository;
 2. classifies the change and applies safe scanning policies;
@@ -31,6 +40,17 @@ the layer around them that:
 
 The goal is simple: install the security toolkit once, then use the same
 repeatable security workflow in every AI-assisted coding repository.
+
+## Who does what
+
+| | Responsibility |
+| --- | --- |
+| **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
+| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes execution results; tracks fix and rescan status; provides the local Dashboard; and provides a conservative release gate. |
+
+Vibe Code Guard does not claim the upstream detection engines as its own work.
+The individual tools remain responsible for their own scanning behavior and
+licenses.
 
 ## The problem we solve
 
@@ -80,7 +100,9 @@ never invoked implicitly by `quick` or `full`.
 This is **composition at the workflow layer**, not a combined binary or a
 fork. The repository does not copy, bundle, modify, or redistribute the
 upstream scanners, their binaries, databases, rules, templates, or add-ons.
-Users install and manage those projects through their own official channels.
+They are independently installed and managed through their own official
+channels. This repository does not relicense them or claim them as its own
+work.
 
 ### 2. A change-aware security pipeline
 
@@ -227,6 +249,11 @@ authors and organizations. Their licenses are **not** replaced by this
 repository's Apache-2.0 license. The current integration invokes independently
 installed tools through explicit adapters and allowlists; it does not link
 against or redistribute their code or binaries.
+
+The listed licenses apply to the upstream repositories themselves. Rule packs,
+templates, vulnerability databases, plugins, add-ons, model assets, and other
+downloaded artifacts may have their own terms and must be reviewed separately
+before use or redistribution.
 
 For every integrated upstream project, the repository records:
 
