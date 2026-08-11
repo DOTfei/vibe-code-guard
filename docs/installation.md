@@ -6,7 +6,7 @@ Vibe Code Guard-owned launchers under `$SECURITY_TOOLKIT_HOME` (default:
 
 ## Platform support
 
-v0.5 is intentionally conservative about platform claims:
+v0.6 is intentionally conservative about platform claims:
 
 | Platform | Status | Notes |
 | --- | --- | --- |
@@ -88,9 +88,21 @@ security-tools doctor
 security-tools self-test --json
 ```
 
-Vibe Code Guard does not blindly upgrade scanners. Scanner updates remain in
-the controlled global security-toolkit lifecycle. `vibe-code-guard update`
+Vibe Code Guard does not blindly upgrade scanners. The v0.6 lifecycle commands
+use fixed official sources, preserve installation provenance, update one named
+scanner at a time, and validate before promotion. `vibe-code-guard update`
 only refreshes Vibe Code Guard-owned launchers from the current checkout.
+
+```bash
+vibe-code-guard tools status --json
+vibe-code-guard tools check-updates --json
+vibe-code-guard tools update semgrep --dry-run --json
+vibe-code-guard tools refresh-data trivy --dry-run --json
+```
+
+Latest-version checks are informational and bounded. Offline or unavailable
+official sources are reported as unknown/degraded rather than current. Engine
+versions and databases, rules, templates, or add-ons are reported separately.
 
 ## Install states
 

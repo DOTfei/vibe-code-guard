@@ -110,17 +110,23 @@ function versionText(result) {
 }
 
 function parseVersion(value, pattern = null) {
+  const text = String(value || '');
+  if (text.length > 1024) return null;
   const match = pattern
-    ? String(value || '').match(new RegExp(pattern))
-    : String(value || '').match(/(?:^|[^0-9])v?(\d+)\.(\d+)(?:\.(\d+))?/);
+    ? text.match(new RegExp(pattern))
+    : text.match(/(?:^|[^0-9A-Za-z.])v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:$|[^0-9A-Za-z.+-])/);
   if (pattern && !match) return null;
   if (pattern) return parseVersion(match[1]);
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+  if (!match) return null;
+  const parsed = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return parsed.every(Number.isSafeInteger) ? parsed : null;
 }
 
 function minimumVersion(range) {
-  const match = String(range || '').match(/^>=\s*(\d+)\.(\d+)(?:\.(\d+))?/);
-  return match ? [Number(match[1]), Number(match[2]), Number(match[3] || 0)] : null;
+  const match = String(range || '').match(/^>=\s*(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+  if (!match) return null;
+  const parsed = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return parsed.every(Number.isSafeInteger) ? parsed : null;
 }
 
 function compareVersions(left, right) {

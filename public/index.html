@@ -110,6 +110,7 @@
                   <div><dt>Started</dt><dd id="run-started">N/A</dd></div>
                   <div><dt>Duration</dt><dd id="run-duration">N/A</dd></div>
                   <div><dt>Current stage</dt><dd id="run-stage">Waiting</dd></div>
+                  <div><dt>Verification</dt><dd id="run-verification">N/A</dd></div>
                 </dl>
                 <p class="summary-explanation" id="summary-explanation">The current screen will reflect real scanner events as they arrive.</p>
               </article>
@@ -178,7 +179,9 @@
           <section class="view" id="view-toolkit" data-view-panel="toolkit">
             <div class="page-intro page-intro--split"><div><p class="eyebrow">The scanners are the evidence</p><h2>Toolkit health</h2><p class="muted">This page reads the real <code>security-tools doctor</code> and <code>security-tools status</code> commands.</p></div><div class="health-actions"><button class="button button--secondary" id="run-doctor" type="button">Run doctor</button><button class="button button--ghost" id="run-self-test" type="button">Run self-test</button></div></div>
             <div class="health-summary panel"><div><span class="eyebrow">Overall toolchain</span><strong id="health-overall">Checking</strong></div><div><span class="eyebrow">Last checked</span><strong id="health-checked">N/A</strong></div><div><span class="eyebrow">Data location</span><strong class="mono" id="health-data">N/A</strong></div></div>
+            <section class="tool-lifecycle panel" aria-live="polite"><div class="panel-header"><div><p class="eyebrow">Independent upstream lifecycle</p><h3>Engine and intelligence freshness</h3></div><div class="health-actions"><button class="button button--secondary" id="check-tool-updates" type="button">Check updates</button><button class="button button--ghost" id="view-tool-update-plan" type="button">View status</button></div></div><div class="tool-lifecycle-summary" id="tool-lifecycle-summary">Lifecycle status is not available yet.</div><p class="muted">Updates are never triggered when the Dashboard opens. Review the official one-tool plan before any mutation.</p></section>
             <div class="health-grid" id="health-grid"></div>
+            <div class="health-grid" id="tool-lifecycle-grid"></div>
             <div class="health-section-label">Optional components</div>
             <div class="health-grid health-grid--optional" id="optional-health-grid"></div>
             <pre class="command-output is-hidden" id="toolkit-output"></pre>

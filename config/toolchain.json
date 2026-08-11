@@ -1,6 +1,6 @@
 {
   "manifestVersion": "1.0",
-  "workflowVersion": "0.5.0",
+  "workflowVersion": "0.6.0",
   "description": "Independently installed upstream security tools used by Vibe Code Guard.",
   "tools": [
     {
@@ -12,6 +12,10 @@
       "supportedVersionRange": ">=8.0.0",
       "candidates": ["gitleaks"],
       "versionArgs": ["version"],
+      "upstream": {"project": "gitleaks", "officialRepository": "https://github.com/gitleaks/gitleaks", "officialDocumentation": "https://github.com/gitleaks/gitleaks#readme"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=8.0.0"},
+      "update": {"method": "brew", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/gitleaks/gitleaks"},
+      "contentUpdates": {"supported": false, "state": "ENGINE_COUPLED", "reason": "Secret detection patterns are coupled to the independently installed engine."},
       "install": {"type": "brew", "formula": "gitleaks", "official": "https://github.com/gitleaks/gitleaks"}
     },
     {
@@ -23,6 +27,10 @@
       "supportedVersionRange": ">=3.0.0",
       "candidates": ["trufflehog"],
       "versionArgs": ["--version"],
+      "upstream": {"project": "trufflehog", "officialRepository": "https://github.com/trufflesecurity/trufflehog", "officialDocumentation": "https://github.com/trufflesecurity/trufflehog"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=3.0.0"},
+      "update": {"method": "brew", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/trufflesecurity/trufflehog"},
+      "contentUpdates": {"supported": false, "state": "ENGINE_COUPLED", "reason": "Detector patterns are coupled to the independently installed engine."},
       "install": {"type": "brew", "formula": "trufflehog", "official": "https://github.com/trufflesecurity/trufflehog"}
     },
     {
@@ -34,6 +42,10 @@
       "supportedVersionRange": ">=1.0.0",
       "candidates": ["semgrep"],
       "versionArgs": ["--version"],
+      "upstream": {"project": "semgrep", "officialRepository": "https://github.com/semgrep/semgrep", "officialDocumentation": "https://semgrep.dev/docs/"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=1.0.0"},
+      "update": {"method": "preserve-provenance", "supportedMethods": ["brew", "pipx", "uv"], "supportsAutomaticUpdate": true, "officialSource": "https://github.com/semgrep/semgrep"},
+      "contentUpdates": {"supported": true, "state": "NETWORK_OR_LOCAL_RULE_SOURCE", "method": "semgrep-rule-source", "officialSource": "https://semgrep.dev/rules"},
       "install": {"type": "brew", "formula": "semgrep", "official": "https://github.com/semgrep/semgrep"}
     },
     {
@@ -45,6 +57,10 @@
       "supportedVersionRange": ">=0.50.0",
       "candidates": ["trivy"],
       "versionArgs": ["--version"],
+      "upstream": {"project": "trivy", "officialRepository": "https://github.com/aquasecurity/trivy", "officialDocumentation": "https://aquasecurity.github.io/trivy/"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=0.50.0"},
+      "update": {"method": "brew", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/aquasecurity/trivy"},
+      "contentUpdates": {"supported": true, "state": "INDEPENDENT_DATABASE", "method": "trivy-db", "officialSource": "https://github.com/aquasecurity/trivy"},
       "install": {"type": "brew", "formula": "trivy", "official": "https://github.com/aquasecurity/trivy"}
     },
     {
@@ -56,6 +72,10 @@
       "supportedVersionRange": ">=2.0.0",
       "candidates": ["osv-scanner"],
       "versionArgs": ["--version"],
+      "upstream": {"project": "osv-scanner", "officialRepository": "https://github.com/google/osv-scanner", "officialDocumentation": "https://google.github.io/osv-scanner/"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=2.0.0"},
+      "update": {"method": "brew", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/google/osv-scanner"},
+      "contentUpdates": {"supported": false, "state": "NETWORK_BACKED", "reason": "OSV vulnerability intelligence is queried through the scanner's supported upstream service."},
       "install": {"type": "brew", "formula": "osv-scanner", "official": "https://github.com/google/osv-scanner"}
     },
     {
@@ -67,6 +87,10 @@
       "supportedVersionRange": ">=3.0.0",
       "candidates": ["checkov"],
       "versionArgs": ["--version"],
+      "upstream": {"project": "checkov", "officialRepository": "https://github.com/bridgecrewio/checkov", "officialDocumentation": "https://www.checkov.io/"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=3.0.0"},
+      "update": {"method": "preserve-provenance", "supportedMethods": ["pipx", "pip"], "supportsAutomaticUpdate": true, "officialSource": "https://github.com/bridgecrewio/checkov"},
+      "contentUpdates": {"supported": false, "state": "ENGINE_COUPLED", "reason": "Checkov policies are coupled to the independently installed package."},
       "install": {"type": "pipx", "package": "checkov", "official": "https://github.com/bridgecrewio/checkov", "fallback": "python3 -m pip install --user checkov"}
     },
     {
@@ -79,6 +103,10 @@
       "candidates": ["zap", "zap.sh", "/Applications/ZAP.app/Contents/Java/zap.sh"],
       "versionArgs": ["-version"],
       "versionPattern": "\\bZAP(?:\\s+|/)[v]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)",
+      "upstream": {"project": "zaproxy", "officialRepository": "https://github.com/zaproxy/zaproxy", "officialDocumentation": "https://www.zaproxy.org/docs/"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=2.14.0"},
+      "update": {"method": "brew-cask", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/zaproxy/zaproxy"},
+      "contentUpdates": {"supported": true, "state": "OFFICIAL_ADDONS", "method": "zap-addons", "officialSource": "https://www.zaproxy.org/addons/"},
       "install": {"type": "brew-cask", "cask": "owasp-zap", "official": "https://github.com/zaproxy/zaproxy"}
     },
     {
@@ -90,6 +118,10 @@
       "supportedVersionRange": ">=3.0.0",
       "candidates": ["nuclei"],
       "versionArgs": ["-version"],
+      "upstream": {"project": "nuclei", "officialRepository": "https://github.com/projectdiscovery/nuclei", "officialDocumentation": "https://docs.projectdiscovery.io/tools/nuclei/overview"},
+      "version": {"strategy": "github-release", "stableOnly": true, "compatibility": ">=3.0.0"},
+      "update": {"method": "brew", "supportsAutomaticUpdate": true, "officialSource": "https://github.com/projectdiscovery/nuclei"},
+      "contentUpdates": {"supported": true, "state": "OFFICIAL_TEMPLATES", "method": "nuclei-templates", "officialSource": "https://github.com/projectdiscovery/nuclei-templates"},
       "install": {"type": "brew", "formula": "nuclei", "official": "https://github.com/projectdiscovery/nuclei"}
     }
   ]

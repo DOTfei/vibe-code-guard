@@ -37,12 +37,16 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
    it.
 2. Detect the stack and inspect `.vibe-code-guard.json` if present.
 3. Verify the installation with `vibe-code-guard doctor --json`.
-4. If the user asked to install it, run `./install.sh --dry-run`, explain the
+4. Before an important release audit, check the independently installed
+   toolchain with `vibe-code-guard tools status --json` and, when appropriate,
+   `vibe-code-guard tools check-updates --json`. Never silently update tools
+   during an audit.
+5. If the user asked to install it, run `./install.sh --dry-run`, explain the
    planned changes, and then run `./install.sh --yes` when that installation
    request authorizes the plan. Read the returned `localEntrypoints.pathHint`;
    because the installer never edits shell startup files, use the returned
    absolute launcher path if `vibe-code-guard` is not already on PATH.
-5. Run one profile through the canonical command; do not invoke the eight
+6. Run one profile through the canonical command; do not invoke the eight
    upstream scanners individually:
 
    ```text
@@ -52,24 +56,28 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
    Use `quick` for frequent development checks, `full` for a broader review,
    and `release` before deployment. Runtime scanners are skipped unless a
    localhost or explicitly authorized target is supplied.
-6. Read `status`, `releaseGate`, `issues`, `correlatedFindings`, scanner
+7. Read `status`, `releaseGate`, `issues`, `correlatedFindings`, scanner
    statuses, and skip reasons from the JSON result.
-7. Start the local Dashboard when useful:
+8. Start the local Dashboard when useful:
 
    ```text
    vibe-code-guard dashboard --json
    ```
 
    Share only the returned `http://127.0.0.1:<port>` URL.
-8. Explain unresolved Critical/High correlated findings first. Cite the
+9. Explain unresolved Critical/High correlated findings first. Cite the
    scanner observation and distinguish evidence from inference.
-9. If the user authorizes a fix, inspect the correlated finding and make the
+10. If the user authorizes a fix, inspect the correlated finding and make the
    smallest safe change. Do not suppress a rule or delete configuration just
    to obtain a pass.
-10. Run the relevant audit again. A finding is VERIFIED only after the
-    deterministic lifecycle workflow records a successful relevant rescan; the
-    agent must not mark it verified directly.
-11. Report the release decision, limitations, skipped checks, and Dashboard
+11. After the authorized fix, mark the finding `FIXING` or `FIXED`, then run
+    `vibe-code-guard verify <finding-id> <project> --json`. Do not mark a
+    finding verified directly. A skipped, failed, degraded, or out-of-scope
+    relevant scanner, malformed structured output, unknown scanner version,
+    unreachable runtime target, or changed scanner/ignore scope produces
+    `VERIFICATION_INCOMPLETE`. Changing an ignore file, exclusion, rule
+    configuration, or runtime target is not proof that the defect was fixed.
+12. Report the release decision, limitations, skipped checks, and Dashboard
     URL. A clean result is not a security guarantee.
 
 ## Safety rules
@@ -85,7 +93,11 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 - Do not let AI review metadata alter severity, lifecycle, scanner evidence, or
   the release gate. v0.4 AI review remains optional and disabled by default.
 - Do not update scanners blindly. `vibe-code-guard update` updates only the
-  Vibe Code Guard-owned launcher and never upgrades the upstream toolchain.
+  Vibe Code Guard-owned launcher. Scanner lifecycle commands update one named
+  upstream tool only through its fixed official channel after explicit
+  confirmation and validation. Never replace repository-controlled upstream
+  sources or treat cached lifecycle state as more authoritative than the real
+  binary, version check, and self-test.
 
 ## User prompt
 

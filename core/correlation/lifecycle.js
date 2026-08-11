@@ -1,5 +1,5 @@
-const LIFECYCLE_STATUSES = Object.freeze(['OPEN', 'FIXED', 'VERIFIED', 'REOPENED', 'FALSE_POSITIVE', 'ACCEPTED_RISK']);
-const ACTION_STATUSES = Object.freeze(['OPEN', 'FIXED', 'FALSE_POSITIVE', 'ACCEPTED_RISK']);
+const LIFECYCLE_STATUSES = Object.freeze(['OPEN', 'FIXING', 'FIXED', 'VERIFIED', 'REOPENED', 'FALSE_POSITIVE', 'ACCEPTED_RISK']);
+const ACTION_STATUSES = Object.freeze(['OPEN', 'FIXING', 'FIXED', 'FALSE_POSITIVE', 'ACCEPTED_RISK']);
 
 function normalizeLifecycleStatus(value) {
   const status = String(value || 'OPEN').toUpperCase();
@@ -27,6 +27,7 @@ function appendHistory(finding, { event, runId = null, previousStatus, newStatus
 function eventForStatus(status) {
   return {
     OPEN: 'OPENED',
+    FIXING: 'FIX_STARTED',
     FIXED: 'FIX_MARKED',
     VERIFIED: 'VERIFIED',
     REOPENED: 'REOPENED',
@@ -38,6 +39,7 @@ function eventForStatus(status) {
 function isVerificationEligible(finding, context = {}) {
   const observations = Array.isArray(finding?.observations) ? finding.observations : [];
   if (!observations.length) return false;
+  if (context.verificationScopeValid === false) return false;
   const tools = context.tools || {};
   const statuses = context.scannerStatuses || {};
   for (const observation of observations) {
@@ -46,6 +48,7 @@ function isVerificationEligible(finding, context = {}) {
     const status = tool?.status || statuses[scanner];
     if (status !== 'PASS') return false;
     if (tool?.decision && tool.decision !== 'RUN') return false;
+    if (tool && Object.prototype.hasOwnProperty.call(tool, 'parseValid') && tool.parseValid !== true) return false;
     if (['zap', 'nuclei'].includes(scanner) && (context.stages?.web?.status !== 'PASS' || !context.webTarget)) return false;
   }
   return true;
@@ -60,7 +63,12 @@ function automaticLifecycle(finding, { observed, verificationEligible = false, r
     appendHistory(finding, { event: 'REOPENED', runId, previousStatus: currentStatus, newStatus: 'REOPENED', reason: reason || 'A previously verified finding was observed again.' }, context);
     return finding;
   }
-  if (!observed && currentStatus === 'FIXED' && verificationEligible) {
+  if (observed && (currentStatus === 'FIXING' || currentStatus === 'FIXED')) {
+    finding.status = 'OPEN';
+    appendHistory(finding, { event: 'STILL_PRESENT', runId, previousStatus: currentStatus, newStatus: 'OPEN', reason: reason || 'The relevant scanner still reports the finding after the authorized fix attempt.' }, context);
+    return finding;
+  }
+  if (!observed && ['FIXING', 'FIXED'].includes(currentStatus) && verificationEligible) {
     finding.status = 'VERIFIED';
     appendHistory(finding, { event: 'VERIFIED', runId, previousStatus: currentStatus, newStatus: 'VERIFIED', reason: reason || 'The relevant scanner ran successfully and no matching observation was reported.' }, context);
     return finding;

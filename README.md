@@ -2,7 +2,7 @@
 
 **A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
 
-`v0.5.0-alpha` · Early Alpha / Active Development · macOS tested
+`v0.6.0-alpha` · Early Alpha / Active Development · macOS tested
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -48,8 +48,8 @@ It is not a new scanner and it does not replace the upstream projects. It is
 the layer around them that understands project context, coordinates the checks,
 normalizes scanner results into one Unified Finding Schema, and brings findings,
 execution state, run history, and the local Dashboard into one workflow.
-Cross-tool correlation and persistent finding lifecycle are now included;
-automated fix/rescan workflow remains a planned milestone:
+Cross-tool correlation, persistent finding lifecycle, targeted verification,
+and upstream tool lifecycle planning are now included:
 
 1. understands what changed in a repository;
 2. classifies the change and applies safe scanning policies;
@@ -59,7 +59,10 @@ automated fix/rescan workflow remains a planned milestone:
 6. presents the result in a local Dashboard with history and a conservative
    release-gate summary; and
 7. stores scanner-independent Unified Findings for the CLI, Dashboard, reports,
-   and a project-level correlation and lifecycle index.
+   and a project-level correlation and lifecycle index;
+8. verifies an authorized external-agent fix with only the relevant scanners;
+9. keeps scanner engine updates separate from databases, rules, templates, and
+   add-ons, with official-source checks and explicit one-tool update plans.
 
 The goal is simple: install the security toolkit once, then use the same
 repeatable security workflow in every AI-assisted coding repository.
@@ -69,11 +72,14 @@ repeatable security workflow in every AI-assisted coding repository.
 | | Responsibility |
 | --- | --- |
 | **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
-| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes results into the v1 Unified Finding Schema; correlates compatible evidence; tracks explicit fix and verification lifecycle; records execution state and run history; presents the local Dashboard and reports; and provides a conservative release gate. Automated fix/rescan remains planned. |
+| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes results into the v1 Unified Finding Schema; correlates compatible evidence; tracks explicit fix and verification lifecycle; performs targeted verification without editing code; records execution state and run history; presents the local Dashboard and reports; and provides a conservative release gate. |
 
 Vibe Code Guard does not claim the upstream detection engines as its own work.
 The individual tools remain responsible for their own scanning behavior and
-licenses.
+licenses. Their versions, releases, rules, databases, templates, and add-ons
+come from the respective upstream projects; Vibe Code Guard does not own or
+guarantee those artifacts and only validates local compatibility and
+known-good state where supported.
 
 ## The problem we solve
 
@@ -146,7 +152,7 @@ parse the current run and explain findings
        ↓
 record execution state and run history
        ↓
-planned: fix → regression test → targeted rescan
+fix authorized by user → targeted rescan → lifecycle verification
        ↓
 human review and conservative release gate
 ```
@@ -177,7 +183,9 @@ read several unrelated terminal outputs. It shows:
 
 The current Dashboard reads the v1 Unified Finding Schema and presents
 correlated issues with scanner observations and explicit lifecycle actions. It
-does not automatically fix code or run a rescan after a fix. See the [Unified
+does not automatically fix code; after an authorized external-agent fix it can
+run a targeted rescan and report `VERIFIED`, `STILL_DETECTED`, or
+`VERIFICATION_INCOMPLETE`. See the [Unified
 Finding Schema documentation](docs/unified-finding-schema.md) and [correlation
 and lifecycle documentation](docs/correlation-and-lifecycle.md) for the field
 contracts and compatibility rules.
@@ -212,9 +220,27 @@ Then verify and audit the authorized project:
 
 ```bash
 vibe-code-guard doctor --json
+vibe-code-guard tools status --json
 vibe-code-guard audit . --profile auto --json
 vibe-code-guard dashboard --json
 ```
+
+After the coding agent has made an authorized fix:
+
+```bash
+vibe-code-guard verify VCG-CORR-... . --json
+```
+
+For upstream tool maintenance, use the explicit lifecycle workflow:
+
+```bash
+vibe-code-guard tools check-updates --json
+vibe-code-guard tools update semgrep --dry-run --json
+vibe-code-guard tools refresh-data trivy --dry-run --json
+```
+
+The audit command and Dashboard never silently upgrade the independently
+installed scanners. See [`docs/tool-lifecycle.md`](docs/tool-lifecycle.md).
 
 Use `quick`, `full`, or `release` when the agent or human needs an explicit
 profile. See [`docs/installation.md`](docs/installation.md) for manual
@@ -345,8 +371,10 @@ Current early-alpha capabilities:
 - normalized Dashboard and Markdown report presentation;
 - scanner execution state, run history, and tool health;
 - deterministic cross-scanner correlation, project-level observations, and
-  explicit `OPEN` / `FIXED` / `VERIFIED` / `REOPENED` / `FALSE_POSITIVE` /
+  explicit `OPEN` / `FIXING` / `FIXED` / `VERIFIED` / `REOPENED` / `FALSE_POSITIVE` /
   `ACCEPTED_RISK` lifecycle states;
+- authorized external-agent fix → targeted rescan → `VERIFIED`,
+  `STILL_DETECTED`, or `VERIFICATION_INCOMPLETE` results;
 - localhost-focused active-testing boundaries; and
 - safe synthetic self-test fixtures;
 - advisory AI Security Review with provider abstraction, bounded redacted
@@ -354,7 +382,9 @@ Current early-alpha capabilities:
   optional and disabled by default; and
 - agent-readable `AGENTS.md` / `CLAUDE.md` instructions, toolchain manifest,
   safe bootstrap states, structured doctor/audit output, project config,
-  localhost Dashboard launch, and Vibe Code Guard-only update/uninstall paths.
+  localhost Dashboard launch, and Vibe Code Guard-only update/uninstall paths;
+- official-source upstream tool lifecycle status, installation provenance,
+  engine/content separation, update plans, and offline-aware reporting.
 
 Planned milestones, not current promises:
 
@@ -365,7 +395,8 @@ Planned milestones, not current promises:
   scanners found, including likely false positives ✅;
 - **v0.5 — Agent Integration:** Codex/Claude Code instructions, safe bootstrap,
   canonical audit, structured contracts, and manual fallback ✅;
-- **v0.6 — Dashboard UX / Local App:** further local usability and packaging;
+- **v0.6 — Fix → Targeted Rescan → Verify + Tool Lifecycle:** authorized
+  remediation verification and official-source engine/content lifecycle ✅;
 - **v0.7 — Real-world Project Testing:** broader compatibility validation;
 - **v0.8 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
 - **v1.0 — Stable Security Review Platform:** after broader testing, review,

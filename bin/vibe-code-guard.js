@@ -14,38 +14,47 @@ const {
   extractJson,
   installLocalEntrypoints,
   installPlan,
+  checkUpdates,
+  lifecycleStatus,
+  refreshContent,
   readProjectConfig,
   runFile,
   safeToolkitHome,
   toolkitSelfTest,
+  updateTool,
   uninstallLocalEntrypoints,
   validateRuntimeTarget,
+  verifyFinding,
 } = require('../core/agent');
 
 const VERSION = require('../package.json').version;
 const PROFILES = new Set(['auto', 'quick', 'full', 'release']);
 
 function usage() {
-  return `Vibe Code Guard ${VERSION}\n\nUsage:\n  vibe-code-guard install [--dry-run] [--yes] [--json]\n  vibe-code-guard doctor [--json]\n  vibe-code-guard audit [project] [--profile auto|quick|full|release] [--json]\n  vibe-code-guard dashboard [--port PORT] [--json] [--dry-run]\n  vibe-code-guard update [--check] [--yes] [--json]\n  vibe-code-guard uninstall [--dry-run] [--yes] [--json]\n  vibe-code-guard version\n\nAliases:\n  security-check audit .\n\nInstallation never changes shell startup files and never removes upstream scanners.`;
+  return `Vibe Code Guard ${VERSION}\n\nUsage:\n  vibe-code-guard install [--dry-run] [--yes] [--json]\n  vibe-code-guard doctor [--json]\n  vibe-code-guard audit [project] [--profile auto|quick|full|release] [--json]\n  vibe-code-guard verify <finding-id> [project] [--web-target URL] [--json]\n  vibe-code-guard rescan --finding <finding-id> [--project project] [--web-target URL] [--json]\n  vibe-code-guard tools status [--json]\n  vibe-code-guard tools check-updates [--json]\n  vibe-code-guard tools update [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard tools refresh-data [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard dashboard [--port PORT] [--json] [--dry-run]\n  vibe-code-guard update [--check] [--yes] [--json]\n  vibe-code-guard uninstall [--dry-run] [--yes] [--json]\n  vibe-code-guard version\n\nAliases:\n  security-check audit .\n\nInstallation never changes shell startup files and never removes upstream scanners.`;
 }
 
 function parseArgs(argv) {
-  const options = { json: false, dryRun: false, yes: false, check: false, profile: null, target: '.', port: null, webTarget: null };
+  const options = { json: false, dryRun: false, yes: false, securityReviewed: false, check: false, profile: null, target: '.', project: null, findingId: null, port: null, webTarget: null, positionals: [] };
   const positionals = [];
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--json') options.json = true;
     else if (arg === '--dry-run' || arg === '--plan') options.dryRun = true;
     else if (arg === '--yes' || arg === '-y') options.yes = true;
+    else if (arg === '--security-reviewed') options.securityReviewed = true;
     else if (arg === '--check') options.check = true;
     else if (arg === '--profile' || arg === '-p') options.profile = argv[++index];
     else if (arg === '--target' || arg === '-t') options.target = argv[++index];
+    else if (arg === '--project') options.project = argv[++index];
+    else if (arg === '--finding') options.findingId = argv[++index];
     else if (arg === '--web-target') options.webTarget = argv[++index];
     else if (arg === '--port') options.port = argv[++index];
     else if (arg === '--help' || arg === '-h') options.help = true;
     else if (!arg.startsWith('-')) positionals.push(arg);
     else throw new Error(`Unknown option: ${arg}`);
   }
+  options.positionals = positionals;
   if (positionals[0] && options.target === '.') options.target = positionals[0];
   return options;
 }
@@ -66,6 +75,8 @@ function humanDoctor(result) {
 
 async function commandDoctor(options) {
   const result = await doctor();
+  try { result.lifecycle = await lifecycleStatus(); } catch (error) { result.lifecycle = { overall: 'DEGRADED', error: error.message }; }
+  if (result.status === 'READY' && result.lifecycle.overall === 'DEGRADED') result.status = 'DEGRADED';
   return emit({ json: options.json, data: result, code: result.status === 'BROKEN' ? 1 : result.status === 'DEGRADED' ? 2 : 0 }, humanDoctor(result));
 }
 
@@ -117,12 +128,15 @@ function summarizeSelfTest(result) {
 function safeProjectRoot(input) {
   if (typeof input !== 'string' || !input.trim() || input.includes('\0') || input.includes('://')) throw new Error('Audit target must be an existing local directory path.');
   const resolved = path.resolve(input);
-  const home = os.homedir();
-  const toolkit = TOOLKIT_HOME();
-  if ([path.parse(resolved).root, home, toolkit].includes(resolved)) throw new Error('Refusing to audit a filesystem root, home directory, or security-toolkit directory.');
-  const stat = fs.statSync(resolved);
+  const real = fs.realpathSync(resolved);
+  const home = fs.realpathSync(os.homedir());
+  const toolkitPath = TOOLKIT_HOME();
+  const toolkit = fs.existsSync(toolkitPath) ? fs.realpathSync(toolkitPath) : path.resolve(toolkitPath);
+  const within = (candidate, parent) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+  if (real === path.parse(real).root || real === home || within(real, toolkit)) throw new Error('Refusing to audit a filesystem root, home directory, or security-toolkit directory.');
+  const stat = fs.statSync(real);
   if (!stat.isDirectory()) throw new Error('Audit target must be a directory.');
-  return resolved;
+  return real;
 }
 
 function selectRuntimeTarget(configTargets, explicit) {
@@ -184,6 +198,62 @@ async function commandAudit(options) {
   };
   const human = [`Audit ${data.status}: ${data.project}`, `Profile: ${profile}`, `Run: ${data.runId}`, `Release gate: ${data.releaseGate.label}`, `Issues: ${data.issues.total} correlated (${data.issues.critical} critical, ${data.issues.high} high, ${data.issues.medium} medium, ${data.issues.low} low)`, data.dashboardUrl ? `Dashboard: ${data.dashboardUrl}` : 'Dashboard: run `vibe-code-guard dashboard` to open local history.'];
   return emit({ json: options.json, data, code: data.status === 'FAILED' ? 1 : 0 }, human.join('\n'));
+}
+
+function lifecycleCode(result) {
+  return result.overall === 'BROKEN' || result.state === 'BROKEN' ? 1 : result.overall === 'DEGRADED' || ['BUSY', 'DEGRADED', 'UPDATE_CHECK_UNAVAILABLE', 'VERIFICATION_REQUIRED', 'SECURITY_REVIEW_REQUIRED', 'MANUAL_REVIEW_REQUIRED'].includes(result.state) ? 2 : 0;
+}
+
+async function commandTools(options) {
+  const subcommand = options.positionals[0] || 'status';
+  const scanner = options.positionals[1] || null;
+  if (subcommand === 'status') {
+    const result = await lifecycleStatus();
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Tool lifecycle: ${result.overall}\n${Object.values(result.tools).map((tool) => `${tool.displayName}: ${tool.state} — engine ${tool.installedVersion || 'not installed'}${tool.updateAvailable ? `; update ${tool.latestStableVersion}` : ''}; content ${tool.content.state}`).join('\n')}`);
+  }
+  if (subcommand === 'check-updates') {
+    const result = await checkUpdates();
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Official update check: ${result.overall}\n${Object.values(result.tools).map((tool) => `${tool.displayName}: ${['BROKEN', 'NOT_INSTALLED', 'DEGRADED'].includes(tool.state) ? tool.state : tool.updateCheck === 'UPDATE_CHECK_UNAVAILABLE' ? 'UNKNOWN — update status could not be verified' : tool.updateAvailable ? `UPDATE_AVAILABLE (${tool.latestStableVersion})` : 'CURRENT'}`).join('\n')}`);
+  }
+  if (subcommand === 'update' && !scanner) {
+    const result = await lifecycleStatus();
+    const data = { ...result, state: 'PLAN_ONLY', reason: 'No scanner was selected. Review status, then run tools update <scanner> for exactly one upstream tool.' };
+    return emit({ json: options.json, data, code: lifecycleCode(result) }, `Tool update plan: ${result.overall}\nNo scanner was selected; no mutation was performed.\nRun: vibe-code-guard tools update <scanner> --dry-run`);
+  }
+  if (!scanner) throw new Error(`Specify one scanner for tools ${subcommand}.`);
+  if (subcommand === 'update') {
+    const result = await updateTool(scanner, { dryRun: options.dryRun || !options.yes, yes: options.yes, securityReviewed: options.securityReviewed });
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Tool update ${scanner}: ${result.state}\n${result.reason || ''}`.trim());
+  }
+  if (subcommand === 'refresh-data') {
+    const result = await refreshContent(scanner, { dryRun: options.dryRun || !options.yes, yes: options.yes, securityReviewed: options.securityReviewed });
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Content refresh ${scanner}: ${result.state}\n${result.reason || ''}`.trim());
+  }
+  throw new Error(`Unknown tools command: ${subcommand}`);
+}
+
+async function commandVerify(options) {
+  const findingId = options.findingId || options.positionals[0];
+  const projectInput = options.project || options.positionals[1] || '.';
+  if (!findingId) throw new Error('Specify a correlated finding id.');
+  const projectPath = safeProjectRoot(projectInput);
+  const projectConfig = readProjectConfig(projectPath);
+  const requestedTarget = options.webTarget || projectConfig.config.runtimeTargets[0] || null;
+  const targetResult = requestedTarget ? validateRuntimeTarget(requestedTarget) : { allowed: true, target: null };
+  if (!targetResult.allowed) throw new Error(targetResult.reason);
+  const result = await verifyFinding({ projectPath, findingId, webTarget: targetResult.target });
+  const data = {
+    findingId,
+    project: projectPath,
+    runId: result.run.id,
+    relevantScanners: result.verification.plan.relevantScanners,
+    verification: result.verification.verification,
+    lifecycle: result.finding.status,
+    reason: result.verification.reason,
+    coverage: result.verification.coverage,
+    releaseGate: result.run.releaseGate,
+  };
+  return emit({ json: options.json, data, code: data.verification === 'PASSED' ? 0 : data.verification === 'VERIFICATION_INCOMPLETE' ? 2 : 1 }, `Verification ${data.verification}: ${findingId}\nLifecycle: ${data.lifecycle}\nScanners: ${data.relevantScanners.join(', ')}\n${data.reason}`);
 }
 
 function findPort(preferred) {
@@ -272,6 +342,8 @@ async function main() {
   if (command === 'doctor') return commandDoctor(options);
   if (command === 'install') return commandInstall(options);
   if (command === 'audit') return commandAudit(options);
+  if (command === 'verify' || command === 'rescan') return commandVerify(options);
+  if (command === 'tools') return commandTools(options);
   if (command === 'dashboard') return commandDashboard(options);
   if (command === 'update') return commandUpdate(options);
   if (command === 'uninstall') return commandUninstall(options);

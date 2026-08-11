@@ -61,6 +61,14 @@ function statusChip(status) {
   return `<span class="status-chip status-chip--${cls}">${escapeHTML(status || 'WAITING')}</span>`;
 }
 
+function lifecycleClass(status) {
+  const value = String(status || '').toUpperCase();
+  if (['BROKEN', 'FAIL'].includes(value)) return 'fail';
+  if (['UPDATE_AVAILABLE', 'CHECK_UNAVAILABLE', 'UPDATE_CHECK_UNAVAILABLE', 'DEGRADED', 'CONTENT_STALE', 'STALE', 'MISSING', 'MANUAL_REVIEW_REQUIRED', 'BUSY', 'PRESENT_FRESHNESS_UNKNOWN'].includes(value)) return 'warning';
+  if (['CURRENT', 'READY', 'PASS', 'REFRESHED'].includes(value)) return 'pass';
+  return 'neutral';
+}
+
 function showToast(message) {
   const toast = $('#toast');
   toast.textContent = message;
@@ -157,11 +165,14 @@ function renderOverview() {
   $('#run-mode').textContent = run?.mode || '—';
   $('#run-started').textContent = run ? formatDate(run.startedAt) : '—';
   $('#run-duration').textContent = run ? duration(run) : '—';
+  $('#run-verification').textContent = run?.verification?.verification || (run?.mode === 'verify' ? 'IN PROGRESS' : 'N/A');
   const active = run && STAGES.find(([id]) => run.stages?.[id]?.status === 'RUNNING');
   $('#run-stage').textContent = active ? active[1] : run?.currentStage ? (run.stages?.[run.currentStage]?.label || run.currentStage) : 'Waiting';
   $('#live-marker').classList.toggle('is-live', run?.status === 'SCANNING');
   $('#live-marker').innerHTML = `<span></span> ${run?.status === 'SCANNING' ? 'live' : 'idle'}`;
-  $('#summary-explanation').textContent = run?.releaseGate?.reason || 'The current screen will reflect real scanner events as they arrive.';
+  $('#summary-explanation').textContent = run?.verification?.reason
+    ? `${run.verification.verification}: ${run.verification.reason}`
+    : run?.releaseGate?.reason || 'The current screen will reflect real scanner events as they arrive.';
   const summary = run?.summary || {};
   $('#metric-critical').textContent = run ? (summary.critical ?? 0) : '—';
   $('#metric-high').textContent = run ? (summary.high ?? 0) : '—';
@@ -253,16 +264,22 @@ function renderFindings() {
     const rawFindings = (run?.findings || []).filter((raw) => observations.some((observation) => observation.scannerFindingId === raw.id));
     const lastEvent = finding.history?.[finding.history.length - 1];
     const terminal = ['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(finding.status);
+    const actions = terminal
+      ? `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>`
+      : finding.status === 'FIXED' || finding.status === 'FIXING'
+        ? `<button class="button button--secondary finding-verify" data-finding-id="${escapeHTML(finding.id)}" type="button">Verify fix</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Keep open</button>`
+        : `<button class="button button--secondary finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FIXED" type="button">Mark as fixed</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FALSE_POSITIVE" type="button">False positive</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="ACCEPTED_RISK" type="button">Accept risk</button>`;
     return `<article class="finding-card finding-card--${statusClass(finding.status)}">
       <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${observations.length} observation${observations.length === 1 ? '' : 's'}</span></div><div class="finding-badges"><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span><span class="lifecycle-label lifecycle-label--${statusClass(finding.status)}">${escapeHTML(finding.status)}</span></div></div>
       <div class="finding-grid"><div class="finding-section"><span>Detected by</span><p>${escapeHTML(detectedBy.join(' · ') || 'Historical compatibility view')}</p></div><div class="finding-section"><span>Location</span><p>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</p></div><div class="finding-section"><span>Correlation confidence</span><p>${escapeHTML(finding.confidence || 'NONE')}</p></div></div>
-      <details class="finding-observation-details"><summary>Show ${observations.length} scanner observation${observations.length === 1 ? '' : 's'}</summary><div class="finding-observations">${observations.map((observation) => `<span>${escapeHTML(observation.scanner || 'unknown')} · ${escapeHTML(observation.ruleId || 'rule')} · ${escapeHTML(observation.runId || 'run')}</span>`).join('')}</div>${rawFindings.length ? `<pre>${escapeHTML(JSON.stringify(rawFindings, null, 2))}</pre>` : '<p class="finding-raw-note">Raw Unified Findings are available in the run API for historical observations.</p>'}</details>
+      <details class="finding-observation-details"><summary>Show ${observations.length} scanner observation${observations.length === 1 ? '' : 's'}</summary><div class="finding-observations">${observations.map((observation) => `<span>${escapeHTML(observation.scanner || 'unknown')} · ${escapeHTML(observation.scannerVersion || 'version unknown')} · ${escapeHTML(observation.ruleId || 'rule')} · ${escapeHTML(observation.runId || 'run')}</span>`).join('')}</div>${rawFindings.length ? `<pre>${escapeHTML(JSON.stringify(rawFindings, null, 2))}</pre>` : '<p class="finding-raw-note">Raw Unified Findings are available in the run API for historical observations.</p>'}</details>
       <div class="finding-footer"><span>${lastEvent ? `${escapeHTML(lastEvent.event)} · ${escapeHTML(formatDate(lastEvent.timestamp))}` : 'No lifecycle history'}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
-      <div class="finding-actions">${terminal ? `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>` : `<button class="button button--secondary finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FIXED" type="button">Mark as fixed</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FALSE_POSITIVE" type="button">False positive</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="ACCEPTED_RISK" type="button">Accept risk</button>`}</div>
+      <div class="finding-actions">${actions}</div>
       ${renderAIReviewPanel(finding, run)}
     </article>`;
   }).join('');
   $$('.finding-action').forEach((button) => button.addEventListener('click', () => updateFindingStatus(button.dataset.findingId, button.dataset.actionStatus)));
+  $$('.finding-verify').forEach((button) => button.addEventListener('click', () => verifyFinding(button.dataset.findingId)));
   $$('.ai-review-action').forEach((button) => button.addEventListener('click', () => generateAIReview(button.dataset.findingId)));
 }
 
@@ -313,6 +330,19 @@ async function updateFindingStatus(findingId, status) {
   } catch (error) { showToast(error.message); }
 }
 
+async function verifyFinding(findingId) {
+  try {
+    const run = currentRun();
+    if (!run) throw new Error('Select a completed run first.');
+    const response = await requestJSON(`/api/runs/${encodeURIComponent(run.id)}/findings/${encodeURIComponent(findingId)}/verify`, { method: 'POST', body: JSON.stringify({}) });
+    appState.latest = response.run;
+    currentRunId = response.run.id;
+    renderOverview();
+    renderFindings();
+    showToast(`${findingId}: ${response.verification?.verification || 'verification finished'}.`);
+  } catch (error) { showToast(error.message); }
+}
+
 function renderHistory() {
   const container = $('#history-list');
   const history = appState.runs || [];
@@ -334,6 +364,7 @@ function renderToolkit() {
   if (!toolkitState) {
     $('#health-overall').textContent = 'Checking…';
     $('#health-grid').innerHTML = '<div class="empty-state">Reading the real local doctor command…</div>';
+    $('#tool-lifecycle-grid').innerHTML = '<div class="empty-state">Reading upstream lifecycle state…</div>';
     $('#optional-health-grid').innerHTML = '';
     return;
   }
@@ -353,6 +384,43 @@ function renderToolkit() {
     const pending = status.includes('PENDING');
     return `<article class="health-card health-card--optional"><div class="health-card-top"><h3>${escapeHTML(tool.name || 'Optional tool')}</h3><span class="health-status ${pending ? 'health-status--pending' : ''}">${escapeHTML(status)}</span></div><p>${escapeHTML(tool.binary || 'CLI not installed')}</p><div class="health-version">${escapeHTML(tool.notes || 'Not part of the core health gate.')}</div></article>`;
   }).join('') : '<div class="empty-state">No optional components registered.</div>';
+  const lifecycle = toolkitState.lifecycle || {};
+  const lifecycleTools = Object.values(lifecycle.tools || {});
+  $('#tool-lifecycle-summary').innerHTML = lifecycleTools.length
+    ? `<strong>${escapeHTML(lifecycle.overall || 'UNKNOWN')}</strong><span>${lifecycleTools.filter((tool) => tool.updateAvailable === true).length} engine update(s) available · ${lifecycleTools.filter((tool) => ['STALE', 'MISSING'].includes(tool.content?.state)).length} stale/missing intelligence source(s)</span>`
+    : '<span>Lifecycle status is not available yet.</span>';
+  $('#tool-lifecycle-grid').innerHTML = lifecycleTools.length ? lifecycleTools.map((tool) => {
+    const engineState = tool.state === 'BROKEN'
+      ? 'BROKEN'
+      : tool.state === 'NOT_INSTALLED'
+        ? 'NOT_INSTALLED'
+        : tool.state === 'DEGRADED'
+          ? 'DEGRADED'
+          : ['UPDATE_CHECK_UNAVAILABLE', 'CACHE_STALE'].includes(tool.updateCheck)
+            ? 'CHECK_UNAVAILABLE'
+            : tool.updateAvailable === true ? 'UPDATE_AVAILABLE' : tool.installedVersion ? 'CURRENT' : 'NOT_INSTALLED';
+    const contentState = tool.content?.state === 'STALE' ? 'CONTENT_STALE' : tool.content?.state || 'UNKNOWN';
+    return `<article class="health-card"><div class="health-card-top"><h3>${escapeHTML(tool.displayName || tool.id)}</h3><span class="health-status health-status--${lifecycleClass(engineState)}">${escapeHTML(engineState)}</span></div><p>${escapeHTML(tool.installedVersion || 'Engine version unknown')} · ${escapeHTML(tool.installMethod || 'provenance unknown')}</p><div class="health-version"><span class="health-status health-status--${lifecycleClass(contentState)}">${escapeHTML(contentState)}</span>${tool.latestStableVersion ? ` · latest stable ${escapeHTML(tool.latestStableVersion)}` : ''}</div></article>`;
+  }).join('') : '<div class="empty-state">Lifecycle details are not available yet.</div>';
+}
+
+async function checkToolUpdates() {
+  try {
+    toolkitState.lifecycle = await requestJSON('/api/toolkit/check-updates', { method: 'POST', body: JSON.stringify({}) });
+    renderToolkit();
+    $('#toolkit-output').classList.remove('is-hidden');
+    $('#toolkit-output').textContent = JSON.stringify(toolkitState.lifecycle, null, 2);
+    showToast('Official tool update check finished.');
+  } catch (error) { showToast(error.message); }
+}
+
+async function viewToolUpdatePlan() {
+  try {
+    toolkitState.lifecycle = await requestJSON('/api/toolkit/lifecycle');
+    renderToolkit();
+    $('#toolkit-output').classList.remove('is-hidden');
+    $('#toolkit-output').textContent = JSON.stringify(toolkitState.lifecycle, null, 2);
+  } catch (error) { showToast(error.message); }
 }
 
 async function refreshState({ keepSelection = true } = {}) {
@@ -471,6 +539,8 @@ function wireEvents() {
   $('#close-report').addEventListener('click', () => $('#report-dialog').close());
   $('#run-doctor').addEventListener('click', runDoctor);
   $('#run-self-test').addEventListener('click', runSelfTest);
+  $('#check-tool-updates').addEventListener('click', checkToolUpdates);
+  $('#view-tool-update-plan').addEventListener('click', viewToolUpdatePlan);
   $('#run-ai-summary').addEventListener('click', () => runAISummary('RUN_SUMMARY'));
   $('#run-ai-release').addEventListener('click', () => runAISummary('RELEASE_REVIEW'));
   $$('.filter-tab').forEach((tab) => tab.addEventListener('click', () => { findingFilter = tab.dataset.severity; renderFindings(); }));
