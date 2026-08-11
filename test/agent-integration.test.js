@@ -27,6 +27,7 @@ test('project config accepts safe local targets and rejects arbitrary commands o
     profile: 'full', runtimeTargets: ['http://127.0.0.1:3000'], ignoredPaths: ['dist/'],
   });
   assert.throws(() => validateConfig({ profile: 'full', command: 'rm -rf /' }), /Unsupported config field/);
+  assert.throws(() => validateConfig({ updateSource: 'https://untrusted.example' }), /Unsupported config field/);
   assert.throws(() => validateConfig({ ignoredPaths: ['../secrets'] }), /relative paths/);
   assert.throws(() => validateConfig({ ignoredPaths: ['$(touch /tmp/pwned)'] }), /shell metacharacters/);
   assert.equal(validateRuntimeTarget('https://example.com').allowed, false);

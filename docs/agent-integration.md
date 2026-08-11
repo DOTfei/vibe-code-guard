@@ -29,6 +29,7 @@ provider.
 ```text
 INSTALL
   → DOCTOR
+  → TOOL CHECK
   → PROJECT_DISCOVERY
   → THREAT_MODEL
   → SCAN
@@ -39,7 +40,7 @@ INSTALL
   → EXPLAIN
 
 Optional after explicit user approval:
-FIX → RESCAN → VERIFY
+FIX → TARGETED RESCAN → VERIFY
 ```
 
 The external agent must preserve this authority order. It may explain a
@@ -76,8 +77,8 @@ unambiguous `vibe-code-guard` command when a name conflict is reported.
 ```json
 {
   "status": "READY",
-  "version": "0.5.0-alpha",
-  "workflowVersion": "0.5.0",
+  "version": "0.6.0-alpha",
+  "workflowVersion": "0.6.0",
   "toolchain": {
     "gitleaks": {
       "status": "READY",
@@ -172,9 +173,41 @@ When the user asks for a fix, the agent should:
 2. inspect the evidence and determine the smallest safe remediation;
 3. avoid blanket ignores, rule deletion, and weakened security controls;
 4. make the authorized code change;
-5. run the relevant Vibe Code Guard profile again; and
-6. report whether the finding is still present or became eligible for verified
-   lifecycle transition.
+5. mark the correlated finding `FIXING` or `FIXED` through the lifecycle
+   workflow; do not edit the persisted index directly;
+6. run targeted verification through
+   `vibe-code-guard verify <finding-id> <project> --json` (or the Dashboard
+   **Verify fix** action); and
+7. report whether the finding became `VERIFIED`, was `STILL_DETECTED`, or was
+   `VERIFICATION_INCOMPLETE`.
+
+Targeted verification selects the scanner family that produced the correlated
+finding. Secrets use Gitleaks and TruffleHog, dependency findings use OSV and
+Trivy, static findings use Semgrep, IaC findings use Checkov and Trivy, and
+runtime findings use ZAP/Nuclei only when an authorized runtime target is in
+scope. A skipped, failed, degraded, or out-of-scope relevant scanner cannot
+establish `VERIFIED`.
+
+The activity trail records the verification request, selected scanners,
+coverage, result, and lifecycle transition. `FALSE_POSITIVE` and
+`ACCEPTED_RISK` remain user-controlled and are never changed by verification.
+
+## Upstream tool lifecycle
+
+Before an important release audit, the agent may run:
+
+```bash
+vibe-code-guard tools status --json
+vibe-code-guard tools check-updates --json
+vibe-code-guard tools update --dry-run --json
+```
+
+The update workflow checks fixed official sources, preserves installation
+provenance, updates one scanner at a time, runs validation, and never runs
+silently as part of `audit`. Engine versions and vulnerability databases,
+rules, templates, and add-ons are reported separately. See
+[`docs/tool-lifecycle.md`](tool-lifecycle.md) for the state model and offline
+behavior.
 
 Never label a finding `FALSE_POSITIVE` or `ACCEPTED_RISK` without an explicit
 user decision and reason.
@@ -187,6 +220,7 @@ Humans can use the same interface without an agent:
 ./install.sh --dry-run
 vibe-code-guard doctor
 vibe-code-guard audit . --profile full
+vibe-code-guard verify VCG-CORR-... . --json
 vibe-code-guard dashboard
 ```
 

@@ -17,12 +17,24 @@ const {
 } = require('./core/findings');
 const {
   CORRELATION_SCHEMA_VERSION,
+  appendHistory,
   countBlockingCorrelatedFindings,
   countCorrelatedFindings,
   explicitLifecycleAction,
   projectIdentity,
   reconcileFindings,
 } = require('./core/correlation');
+const {
+  verificationCoverage,
+  verificationOutcome,
+  verificationPlan,
+} = require('./core/verification');
+const {
+  checkUpdates,
+  lifecycleStatus,
+  refreshContent,
+  updateTool,
+} = require('./core/agent/tool-lifecycle');
 const {
   AI_REVIEW_SCHEMA_VERSION,
   buildReviewContext,
@@ -278,6 +290,7 @@ function saveRun(run) {
     summary: run.summary,
     observationSummary: run.observationSummary || countFindings(run.findings),
     projectId: run.projectId,
+    verification: run.verification || null,
     correlationSchemaVersion: CORRELATION_SCHEMA_VERSION,
     correlatedSummary: run.correlatedSummary || countCorrelatedFindings(run.correlatedFindings),
     releaseGate: run.releaseGate,
@@ -332,7 +345,7 @@ function createTools() {
   }, {});
 }
 
-function createRun({ projectPath, mode, webTarget }) {
+function createRun({ projectPath, mode, webTarget, verification = null }) {
   const orchestration = mode === 'auto' ? buildExecutionPlan({ projectPath, webTarget }) : null;
   const id = `${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomBytes(3).toString('hex')}`;
   const dir = ensureDirectory(path.join(DATA_DIR, id));
@@ -358,6 +371,7 @@ function createRun({ projectPath, mode, webTarget }) {
     projectName: path.basename(projectPath) || projectPath,
     mode,
     webTarget: webTarget || null,
+    verification,
     status: 'SCANNING',
     startedAt: isoNow(),
     finishedAt: null,
@@ -434,9 +448,12 @@ function resolveBinary(name) {
   } catch {
     configured = {};
   }
-  return typeof configured[name] === 'string' && configured[name].trim()
-    ? configured[name].trim()
-    : name;
+  if (typeof configured[name] === 'string' && configured[name].trim()) return configured[name].trim();
+  if (name === 'zap') {
+    const macPath = '/Applications/ZAP.app/Contents/Java/zap.sh';
+    if (fs.existsSync(macPath)) return macPath;
+  }
+  return name;
 }
 
 function parserFor(tool) {
@@ -518,6 +535,141 @@ function executeScanner(run, { tool, stage, args, outputName, parser, reportPath
     child.on('error', (error) => finish(null, error));
     child.on('close', (code) => finish(code, null));
   });
+}
+
+function targetedScannerSpec(tool, run) {
+  const report = (name) => path.join(run.dir, name);
+  const specs = {
+    gitleaks: { stage: 'rescan', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', report('gitleaks-report.json')], outputName: 'gitleaks-output.txt', reportPath: report('gitleaks-report.json') },
+    trufflehog: { stage: 'rescan', args: ['filesystem', run.projectPath, '--no-verification', '--no-update', '--no-color', '--json'], outputName: 'trufflehog-output.jsonl' },
+    semgrep: { stage: 'rescan', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json' },
+    'osv-scanner': { stage: 'rescan', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json' },
+    trivy: { stage: 'rescan', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json' },
+    checkov: { stage: 'rescan', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json' },
+    nuclei: { stage: 'web', args: ['-u', run.webTarget, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl' },
+    zap: { stage: 'web', args: ['-cmd', '-quickurl', run.webTarget, '-quickout', report('zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', reportPath: report('zap-report.json') },
+  };
+  return specs[tool] || null;
+}
+
+function verificationFinding(projectPath, findingId) {
+  const project = projectIdentity(projectPath);
+  const index = readProjectIndex(project.id);
+  return { project, index, finding: index.findings.find((item) => item.id === findingId) || null };
+}
+
+function createVerificationRun({ projectPath, findingId, webTarget }) {
+  const located = verificationFinding(projectPath, findingId);
+  if (!located.finding) throw new Error(`Correlated finding ${findingId} was not found for this project.`);
+  if (['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(located.finding.status)) throw new Error('User-controlled FALSE_POSITIVE and ACCEPTED_RISK findings cannot be automatically verified.');
+  if (located.finding.status === 'OPEN') throw new Error('Mark the finding FIXING or FIXED after an authorized external fix before targeted verification.');
+  const plan = verificationPlan(located.finding, { webTarget });
+  if (plan.authorizationRequired) throw new Error(plan.reason);
+  const run = createRun({ projectPath, mode: 'verify', webTarget, verification: { findingId, plan, status: 'STARTING' } });
+  const current = readProjectIndex(located.project.id);
+  const target = current.findings.find((item) => item.id === findingId);
+  appendHistory(target, { event: 'VERIFICATION_STARTED', runId: run.id, previousStatus: target.status, newStatus: target.status, reason: 'Targeted verification was requested after an authorized external fix attempt.' }, { runId: run.id, timestamp: isoNow() });
+  saveProjectIndex(current);
+  run.correlatedFindings = current.findings;
+  run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
+  run.summary = run.correlatedSummary;
+  saveRun(run);
+  return { run, target, plan };
+}
+
+async function runTargetedVerification(run) {
+  const located = verificationFinding(run.projectPath, run.verification.findingId);
+  if (!located.finding) throw new Error(`Correlated finding ${run.verification.findingId} disappeared before verification started.`);
+  const plan = verificationPlan(located.finding, { webTarget: run.webTarget });
+  run.verification.plan = plan;
+  stageStart(run, 'discovery');
+  const discovery = detectStack(run.projectPath);
+  run.stack = discovery.stack;
+  stageFinish(run, 'discovery', 'PASS', `${discovery.files.length} relevant project signals found`);
+  skipStage(run, 'threat-model', 'Threat modeling remains the external agent and developer responsibility.');
+  for (const [toolId, tool] of Object.entries(run.tools)) {
+    if (!plan.relevantScanners.includes(toolId)) {
+      tool.status = 'NOT_APPLICABLE';
+      tool.decision = 'NOT_APPLICABLE';
+      tool.decisionReason = 'Not relevant to the selected correlated finding.';
+    }
+  }
+  stageStart(run, 'rescan');
+  for (const toolId of plan.relevantScanners) {
+    const spec = targetedScannerSpec(toolId, run);
+    if (!spec) {
+      run.tools[toolId].status = 'SKIPPED';
+      run.tools[toolId].decision = 'SKIP';
+      run.tools[toolId].decisionReason = 'No safe targeted adapter is configured.';
+      continue;
+    }
+    if (spec.stage === 'web' && run.stages.web.status !== 'RUNNING') stageStart(run, 'web');
+    await executeScanner(run, { tool: toolId, ...spec, parser: null });
+  }
+  if (run.stages.web.status === 'RUNNING') stageFinish(run, 'web', plan.relevantScanners.filter((item) => ['zap', 'nuclei'].includes(item)).every((item) => run.tools[item].status === 'PASS') ? 'PASS' : 'FAIL', `Authorized target: ${run.webTarget || 'none'}`);
+  const coverage = verificationCoverage(plan, run.tools, { webTarget: run.webTarget });
+  stageFinish(run, 'rescan', coverage.complete ? 'PASS' : 'FAIL', coverage.reason);
+  skipStage(run, 'manual', 'Manual security review is not part of targeted scanner verification.');
+  skipStage(run, 'fix', 'The external coding agent owns code changes; Vibe Code Guard only verifies them.');
+  const current = readProjectIndex(located.project.id);
+  const existing = current.findings.find((item) => item.id === run.verification.findingId);
+  const reconciled = reconcileFindings([existing], run.findings, {
+    projectId: located.project.id,
+    projectPath: run.projectPath,
+    runId: run.id,
+    startedAt: run.startedAt,
+    observedAt: isoNow(),
+    tools: run.tools,
+    stages: run.stages,
+    webTarget: run.webTarget,
+  });
+  const updatedFinding = reconciled.findings[0] || existing;
+  current.findings = current.findings.map((item) => item.id === run.verification.findingId ? updatedFinding : item);
+  saveProjectIndex(current);
+  const outcome = verificationOutcome({ finding: existing, updatedFinding, coverage });
+  run.verification = { ...run.verification, plan, coverage, ...outcome, completedAt: isoNow() };
+  run.correlatedFindings = current.findings;
+  run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
+  run.summary = run.correlatedSummary;
+  run.observationSummary = countFindings(run.findings);
+  run.finishedAt = isoNow();
+  run.status = outcome.verification === 'PASSED' ? 'PASS' : outcome.verification === 'VERIFICATION_INCOMPLETE' ? 'PASS WITH WARNINGS' : 'FAIL';
+  run.releaseGate = { label: 'DO NOT DEPLOY', reason: outcome.verification === 'PASSED' ? 'Targeted verification passed, but a complete release assessment is still required.' : outcome.reason };
+  run.currentStage = 'decision';
+  run.stages.decision.status = run.status === 'PASS' ? 'PASS' : 'WARNING';
+  run.stages.decision.finishedAt = run.finishedAt;
+  run.aiReviews = aiReviewSummariesForRun(run);
+  run.aiSummaryReviews = aiSummaryStatesForRun(run);
+  atomicWrite(path.join(run.dir, 'summary.json'), `${JSON.stringify({ summary: run.summary, releaseGate: run.releaseGate, status: run.status, verification: run.verification }, null, 2)}\n`);
+  atomicWrite(path.join(run.dir, 'security-report.md'), buildReport(run));
+  saveRun(run);
+  writeEvent(run, { kind: 'verification-finished', stage: 'decision', status: run.status, verification: outcome.verification, findingId: run.verification.findingId, message: `Targeted verification ${outcome.verification}: ${outcome.reason}` });
+  saveRun(run);
+  return { run, finding: updatedFinding, verification: run.verification };
+}
+
+async function verifyFinding({ projectPath, findingId, webTarget = null }) {
+  const active = [...runs.values()].find((run) => run.projectPath === projectPath && run.status === 'SCANNING');
+  if (active) throw new Error(`A scan is already running for this project: ${active.id}`);
+  const created = createVerificationRun({ projectPath, findingId, webTarget });
+  try {
+    return await runTargetedVerification(created.run);
+  } catch (error) {
+    created.run.status = 'FAIL';
+    created.run.finishedAt = isoNow();
+    if (created.run.stages.rescan.status === 'RUNNING') stageFinish(created.run, 'rescan', 'FAIL', error.message || 'Targeted verification failed.');
+    if (created.run.stages.decision.status === 'WAITING') {
+      created.run.currentStage = 'decision';
+      created.run.stages.decision.status = 'FAIL';
+      created.run.stages.decision.finishedAt = created.run.finishedAt;
+    }
+    created.run.verification = { ...created.run.verification, verification: 'VERIFICATION_INCOMPLETE', lifecycle: created.target.status, reason: redact(error.message || 'Targeted verification failed.'), completedAt: isoNow() };
+    created.run.releaseGate = { label: 'DO NOT DEPLOY', reason: created.run.verification.reason };
+    saveRun(created.run);
+    writeEvent(created.run, { kind: 'verification-error', stage: 'rescan', status: 'FAIL', findingId, message: created.run.verification.reason });
+    saveRun(created.run);
+    throw error;
+  }
 }
 
 function safeProjectPath(input) {
@@ -1052,9 +1204,12 @@ async function toolkitHealth() {
       tool.lastSelfTest = lockTools.tools[id].last_self_test || null;
     }
   }
+  let lifecycle = null;
+  try { lifecycle = await lifecycleStatus(); } catch (error) { lifecycle = { overall: 'DEGRADED', error: redact(error.message) }; }
   return {
     doctor: parsedDoctor,
     optionalTools: lockTools.optionalTools,
+    lifecycle,
     statusOutput: status.output,
     doctorOutput: doctor.output,
   };
@@ -1247,6 +1402,22 @@ const server = http.createServer(async (request, response) => {
       void runAudit(run);
       return sendJson(response, 202, { runId: run.id });
     }
+    if (request.method === 'POST' && /^\/api\/runs\/[^/]+\/findings\/[^/]+\/(?:verify|rescan)$/.test(pathname)) {
+      const parts = pathname.split('/');
+      const run = hydrateRun(decodeURIComponent(parts[3]));
+      if (!run) return sendJson(response, 404, { error: 'Run not found' });
+      const findingId = decodeURIComponent(parts[5]);
+      const body = await readBody(request);
+      const requestedTarget = body.webTarget || run.webTarget || null;
+      const webTarget = requestedTarget ? safeWebTarget(requestedTarget) : null;
+      if (requestedTarget && !webTarget) return sendJson(response, 400, { error: 'Web targets must be authorized localhost or an explicitly configured test target.' });
+      try {
+        const result = await verifyFinding({ projectPath: run.projectPath, findingId, webTarget });
+        return sendJson(response, 200, result);
+      } catch (error) {
+        return sendJson(response, 409, { error: redact(error.message) });
+      }
+    }
     if (request.method === 'POST' && pathname.startsWith('/api/runs/') && pathname.endsWith('/stop')) {
       const id = pathname.split('/')[3];
       const run = hydrateRun(id);
@@ -1285,6 +1456,18 @@ const server = http.createServer(async (request, response) => {
       return sendJson(response, 200, { finding, run });
     }
     if (request.method === 'POST' && pathname === '/api/toolkit/doctor') return sendJson(response, 200, await toolkitHealth());
+    if (request.method === 'GET' && pathname === '/api/toolkit/lifecycle') return sendJson(response, 200, await lifecycleStatus());
+    if (request.method === 'POST' && pathname === '/api/toolkit/check-updates') return sendJson(response, 200, await checkUpdates());
+    if (request.method === 'POST' && pathname === '/api/toolkit/update') {
+      const body = await readBody(request);
+      if (typeof body.scanner !== 'string' || !body.scanner.trim()) return sendJson(response, 400, { error: 'Specify one scanner.' });
+      return sendJson(response, 200, await updateTool(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true }));
+    }
+    if (request.method === 'POST' && pathname === '/api/toolkit/refresh-data') {
+      const body = await readBody(request);
+      if (typeof body.scanner !== 'string' || !body.scanner.trim()) return sendJson(response, 400, { error: 'Specify one scanner.' });
+      return sendJson(response, 200, await refreshContent(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true }));
+    }
     if (request.method === 'POST' && pathname === '/api/toolkit/self-test') {
       const result = await runFixedCommand('security-tools', ['self-test']);
       return sendJson(response, 200, { code: result.code, output: result.output, healthy: result.code === 0 && /ALL PASSED/.test(result.output) });
@@ -1303,4 +1486,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, createRun, runAudit, hydrateRun, readRuns, safeProjectPath, safeWebTarget, detectStack };
+module.exports = { server, createRun, runAudit, verifyFinding, hydrateRun, readRuns, safeProjectPath, safeWebTarget, detectStack };

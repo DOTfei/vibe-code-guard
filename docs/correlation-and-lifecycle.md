@@ -36,13 +36,16 @@ Equal severity, similar titles, or similar scanner names are never sufficient by
 | State | Meaning |
 | --- | --- |
 | `OPEN` | A current issue needs attention. |
+| `FIXING` | A user-authorized external agent is actively addressing the issue. |
 | `FIXED` | A user explicitly marked that a fix was attempted. |
 | `VERIFIED` | A later relevant scan ran successfully and no matching observation was reported. |
 | `REOPENED` | A previously verified finding was observed again. |
 | `FALSE_POSITIVE` | A user explicitly classified the finding as not applicable; a reason is required. |
 | `ACCEPTED_RISK` | A user explicitly accepted the risk; a reason is required. |
 
-The normal path is `OPEN → FIXED → VERIFIED`. A current observation keeps an open issue open, keeps an attempted fix in `FIXED`, and changes `VERIFIED → REOPENED`.
+The normal path is `OPEN → FIXING → FIXED → VERIFIED`. A current observation
+keeps an open issue open, returns an attempted fix to `OPEN`, and changes
+`VERIFIED → REOPENED`.
 
 `FALSE_POSITIVE` and `ACCEPTED_RISK` never change automatically. A later explicit local action is required to reclassify them.
 
@@ -51,6 +54,11 @@ The normal path is `OPEN → FIXED → VERIFIED`. A current observation keeps an
 Absence is not proof of a fix. A finding is eligible for verification only when every relevant scanner represented by its observations completed with status `PASS`, was selected to run, and covered the relevant scope. Runtime observations additionally require a successful web stage and an authorized target.
 
 If a scanner is skipped, fails, or the target is unavailable, the finding remains in its current state and the lifecycle history records that verification was deferred.
+
+v0.6 targeted verification runs only the relevant scanner family. Use
+`vibe-code-guard verify <finding-id> <project> --json` after an authorized
+external-agent fix; a missing or failed relevant scanner produces
+`VERIFICATION_INCOMPLETE` rather than `VERIFIED`.
 
 ## History and compatibility
 
