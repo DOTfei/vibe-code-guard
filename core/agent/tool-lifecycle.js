@@ -357,7 +357,7 @@ async function runToolSelfTest(toolId, { runCommand = runFile } = {}) {
   return { status, exitCode: result.code, reason: tool?.reason || null };
 }
 
-async function lifecycleStatus({ toolkitHome = TOOLKIT_HOME(), checkUpdates = false, fetchJson = defaultFetchJson, inspect = inspectTool, now = () => Date.now() } = {}) {
+async function lifecycleStatus({ toolkitHome = TOOLKIT_HOME(), checkUpdates = false, persist = true, fetchJson = defaultFetchJson, inspect = inspectTool, now = () => Date.now() } = {}) {
   const manifest = loadManifest();
   const state = readState(toolkitHome);
   const checkedAt = new Date(now()).toISOString();
@@ -382,7 +382,7 @@ async function lifecycleStatus({ toolkitHome = TOOLKIT_HOME(), checkUpdates = fa
       lastChecked: checkedAt,
     };
   }
-  if (checkUpdates) writeState({ ...state, checkedAt }, toolkitHome);
+  if (checkUpdates && persist) writeState({ ...state, checkedAt }, toolkitHome);
   const values = Object.values(tools);
   const overall = values.some((tool) => tool.required && ['BROKEN', 'NOT_INSTALLED'].includes(tool.state)) ? 'BROKEN' : values.some((tool) => tool.state === 'DEGRADED' || ['UPDATE_CHECK_UNAVAILABLE', 'CACHE_STALE'].includes(tool.updateCheck) || (tool.content.supported && ['STALE', 'UNKNOWN', 'PRESENT_FRESHNESS_UNKNOWN'].includes(tool.content.state))) ? 'DEGRADED' : 'READY';
   return { schemaVersion: '1.0', checkedAt, cacheTtlMs: DEFAULT_CACHE_TTL_MS, overall, tools, statePath: statePath(toolkitHome) };
@@ -396,7 +396,7 @@ async function updateTool(toolId, { toolkitHome = TOOLKIT_HOME(), dryRun = true,
   const manifest = loadManifest();
   const tool = manifest.tools.find((item) => item.id === toolId);
   if (!tool) throw new Error(`Unknown upstream tool: ${toolId}`);
-  const status = await lifecycleStatus({ toolkitHome, checkUpdates: true, inspect, fetchJson, now });
+  const status = await lifecycleStatus({ toolkitHome, checkUpdates: true, persist: Boolean(yes && !dryRun), inspect, fetchJson, now });
   const item = status.tools[toolId];
   const action = actionFor(tool, item, 'update');
   const base = { scanner: toolId, installed: item.installedVersion, latestStable: item.latestStableVersion, installMethod: item.installMethod, source: item.source, compatibility: item.compatibility, securityReview: securityReviewed ? 'ACKNOWLEDGED' : 'REQUIRED', action: action ? 'UPDATE_AVAILABLE' : 'UPDATE_UNSUPPORTED', updateAvailable: item.updateAvailable, plan: action };

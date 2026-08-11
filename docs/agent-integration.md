@@ -104,6 +104,10 @@ unambiguous `vibe-code-guard` command when a name conflict is reported.
 Overall states are `READY`, `DEGRADED`, or `BROKEN`. A missing or unusable
 required scanner is not silently treated as ready. Network/database
 limitations are reported as degraded where the local binary remains usable.
+When a tool is `DEGRADED`, the agent may continue known-good deterministic
+checks that do not depend on the unavailable capability, but must call out the
+missing coverage and must not describe the audit as complete or secure. A
+`BROKEN` required tool blocks the workflow until the local failure is resolved.
 
 Every JSON response from the agent-facing CLI includes `schemaVersion: "1.0"`
 and `workflowVersion: "0.7.0"`. The stable command contract is:

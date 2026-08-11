@@ -133,6 +133,7 @@ test('one-tool update and content refresh default to plans without mutation', as
   assert.equal(update.state, 'PLAN_ONLY');
   assert.equal(update.plan.method, 'homebrew');
   assert.equal(commandCalls, 0);
+  assert.equal(fs.existsSync(statePath(toolkitHome)), false, 'dry-run must not persist lifecycle state');
   const refresh = await refreshContent('trivy', { toolkitHome, dryRun: true, inspect });
   assert.equal(refresh.state, 'PLAN_ONLY');
   assert.equal(refresh.plan.method, 'official Trivy vulnerability DB refresh');

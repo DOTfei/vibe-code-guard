@@ -29,9 +29,18 @@ const isolatedServerRoot = fs.mkdtempSync(path.join(require('node:os').tmpdir(),
 process.env.SECURITY_TOOLKIT_HOME = path.join(isolatedServerRoot, 'toolkit');
 process.env.SECURITY_DASHBOARD_DATA_DIR = path.join(isolatedServerRoot, 'runs');
 fs.mkdirSync(process.env.SECURITY_TOOLKIT_HOME, { recursive: true });
-const { detectStack, safeWebTarget } = require('../../server');
+const { detectStack, safeWebTarget, hydrateRun } = require('../../server');
+const { correlateFindings, normalizePersistedFindings } = require('../../core/findings');
 
 const FIXTURE_NAMES = ['react-vite', 'node-api', 'python', 'supabase-style', 'docker', 'terraform'];
+const EXPECTED_PLAN = {
+  'react-vite': { run: ['gitleaks', 'semgrep', 'osv-scanner', 'trivy'], skipped: ['trufflehog', 'checkov', 'zap', 'nuclei', 'strix'] },
+  'node-api': { run: ['gitleaks', 'trufflehog', 'semgrep', 'osv-scanner', 'trivy'], skipped: ['checkov', 'zap', 'nuclei'] },
+  python: { run: ['gitleaks', 'semgrep', 'osv-scanner', 'trivy'], skipped: ['trufflehog', 'checkov', 'zap', 'nuclei', 'strix'] },
+  'supabase-style': { run: ['gitleaks', 'trufflehog', 'semgrep'], skipped: ['osv-scanner', 'trivy', 'checkov', 'zap', 'nuclei'] },
+  docker: { run: ['gitleaks', 'semgrep', 'osv-scanner', 'trivy'], skipped: ['trufflehog', 'checkov', 'zap', 'nuclei', 'strix'] },
+  terraform: { run: ['gitleaks', 'semgrep', 'trivy', 'checkov'], skipped: ['trufflehog', 'osv-scanner', 'zap', 'nuclei', 'strix'] },
+};
 
 function syntheticChangeSet(projectPath) {
   const files = [];
@@ -51,11 +60,11 @@ function dependencyFindings() {
   return {
     'osv-scanner': [{
       source: { path: 'package.json' },
-      packages: [{ package: { name: 'lodash', version: '4.17.11' }, vulnerabilities: [{ id: 'CVE-2026-0001', summary: 'lodash synthetic vulnerability', database_specific: { severity: 'HIGH' } }] }],
+      packages: [{ package: { name: 'lodash', version: '4.17.11' }, vulnerabilities: [{ id: 'CVE-2021-23337', summary: 'lodash prototype pollution vulnerability', database_specific: { severity: 'HIGH' } }] }],
     }],
     trivy: [{
       Target: 'package.json',
-      Vulnerabilities: [{ VulnerabilityID: 'CVE-2026-0001', PkgName: 'lodash', InstalledVersion: '4.17.11', Severity: 'HIGH', Title: 'lodash synthetic vulnerability', FixedVersion: '4.17.12' }],
+      Vulnerabilities: [{ VulnerabilityID: 'CVE-2021-23337', PkgName: 'lodash', InstalledVersion: '4.17.11', Severity: 'HIGH', Title: 'lodash prototype pollution vulnerability', FixedVersion: '4.17.12' }],
     }],
   };
 }
@@ -71,6 +80,75 @@ test('v0.7 fixture matrix has expected stack signals and proportionate scanner p
     assert.equal(plan.tools.some((item) => item.decision === 'RUN'), true);
     assert.notEqual(plan.tools.find((item) => item.tool === 'strix').decision, 'RUN');
     assert.ok(plan.tools.every((item) => item.reason), `${name} has a scanner without a decision reason`);
+    const expected = EXPECTED_PLAN[name];
+    assert.deepEqual(plan.tools.filter((item) => item.decision === 'RUN').map((item) => item.tool), expected.run, `${name} selected scanners changed`);
+    assert.deepEqual(plan.tools.filter((item) => ['SKIPPED', 'NOT_APPLICABLE'].includes(item.decision)).map((item) => item.tool), expected.skipped, `${name} skipped scanners changed`);
+    for (const tool of expected.skipped) assert.match(plan.tools.find((item) => item.tool === tool).reason, /.+/);
+  }
+});
+
+test('v0.2-v0.6 history remains readable without rewriting prior run artifacts', () => {
+  const project = fixturePath('node-api');
+  const projectPath = fs.realpathSync(project);
+  const releases = ['v0.2', 'v0.3', 'v0.4', 'v0.5', 'v0.6'];
+  for (const [index, release] of releases.entries()) {
+    const id = `20260811${String(index + 1).padStart(6, '0')}-a${String(index).repeat(5)}`;
+    const dir = path.join(process.env.SECURITY_DASHBOARD_DATA_DIR, id);
+    const startedAt = `2026-08-11T00:0${index}:00.000Z`;
+    const metadata = {
+      ...(release === 'v0.2' ? {} : { schemaVersion: '1.0' }),
+      id,
+      projectName: `history-${release}`,
+      projectPath,
+      mode: 'quick',
+      status: 'COMPLETE',
+      startedAt,
+      finishedAt: `2026-08-11T00:0${index}:01.000Z`,
+      currentStage: 'complete',
+      stages: {},
+      tools: { gitleaks: { status: 'PASS', decision: 'RUN', version: '8.30.1' } },
+      stack: ['Node.js'],
+      summary: { high: 1, total: 1 },
+      observationSummary: { high: 1, total: 1 },
+      projectId: `history-${release}`,
+      releaseGate: { label: 'DO NOT DEPLOY', reason: 'Synthetic historical evidence.' },
+      ...(release === 'v0.6' ? { verification: { status: 'VERIFICATION_INCOMPLETE' } } : {}),
+    };
+    const rawFinding = {
+      id: `GITLEAKS-${release}`,
+      scanner: 'gitleaks',
+      severity: 'HIGH',
+      category: 'Secret exposure',
+      title: `Synthetic historical ${release} finding`,
+      file: 'src/routes/auth.js',
+      status: 'OPEN',
+    };
+    const normalized = normalizePersistedFindings([rawFinding], {
+      runId: id,
+      projectPath,
+      startedAt,
+      observedAt: metadata.finishedAt,
+    });
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`);
+    fs.writeFileSync(path.join(dir, 'findings.json'), `${JSON.stringify(release === 'v0.2' ? [rawFinding] : normalized, null, 2)}\n`);
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${JSON.stringify({ kind: 'scan-started', timestamp: startedAt })}\n`);
+    if (release !== 'v0.2') {
+      const correlation = correlateFindings(normalized, {
+        projectId: metadata.projectId,
+        projectPath,
+        runId: id,
+        startedAt,
+        observedAt: metadata.finishedAt,
+      });
+      fs.writeFileSync(path.join(dir, 'correlation.json'), `${JSON.stringify({ schemaVersion: '1.0', projectId: metadata.projectId, ...correlation }, null, 2)}\n`);
+    }
+    const before = fs.readFileSync(path.join(dir, 'findings.json'), 'utf8');
+    const run = hydrateRun(id);
+    assert.ok(run, `${release} history should hydrate`);
+    assert.equal(run.findings.length, 1);
+    assert.equal(run.correlatedFindings.length, 1);
+    assert.equal(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'), before);
   }
 });
 

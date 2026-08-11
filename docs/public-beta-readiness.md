@@ -25,18 +25,38 @@ global scanner installation.
 
 ## Release checklist
 
-| Area | v0.7 position |
-| --- | --- |
-| Install | `./install.sh --dry-run` is the safe preview; `--yes` applies only its fixed plan. No `curl | sh`, arbitrary scripts, shell startup edits, or OS security-control changes. |
-| Uninstall | Removes only Vibe Code Guard-owned launchers/metadata and preserves upstream scanners and unrelated files. |
-| Doctor | Reports `READY`, `DEGRADED`, or `BROKEN`; binary health and external content/update freshness remain distinguishable. |
-| Audit | `vibe-code-guard audit . --profile auto|quick|full|release --json`; the agent need not call eight scanners individually. |
-| Dashboard | Binds to `127.0.0.1` only, has no cloud account, telemetry, analytics, or source upload, and exposes real persisted run data. |
-| Fix/verify | Only an authorized external agent changes application code. Verification requires the relevant scanner coverage, known versions, valid structured output, stable scope, and a successful rescan. |
-| Updater | `vibe-code-guard update` manages only Vibe Code Guard launchers. Scanner updates are one-tool, official-source, explicit, validated lifecycle operations. |
-| Ownership | Upstream scanners are independently installed, not bundled, not modified, not relicensed, and not claimed as Vibe Code Guard work. Review downloaded rules, templates, databases, add-ons, and plugins separately. |
-| Privacy | Normal Vibe Code Guard operations are local-only. v0.4 advisory AI is disabled by default; no real provider is included in v0.7. |
-| Scope | ZAP/Nuclei require localhost, local Docker, or exact explicit authorization. `0.0.0.0` and arbitrary public targets are rejected. |
+| Area | Status | Evidence class | v0.7 position |
+| --- | --- | --- | --- |
+| Install | PASS | Real dry-run + isolated tests | `./install.sh --dry-run` is the safe preview; missing/prerequisite/conflict states are tested without host mutation. |
+| Uninstall | PASS | Existing deterministic tests | Removes only Vibe Code Guard-owned launchers/metadata and preserves upstream scanners and unrelated files. |
+| Doctor | DEGRADED | Real toolchain health | Reports `READY`, `DEGRADED`, or `BROKEN`; this machine remains degraded because Semgrep/ZAP version paths and content freshness require review. |
+| Audit | PASS | Mock E2E; real smoke separate | `vibe-code-guard audit . --profile auto|quick|full|release --json`; the agent need not call eight scanners individually. |
+| Dashboard | PASS | Mock E2E + loopback smoke | Binds to `127.0.0.1` only, has no cloud account, telemetry, analytics, or source upload, and exposes real persisted run data. |
+| Fix/verify | PASS | Mock E2E | Only an authorized external agent changes application code. Verification requires relevant coverage, known versions, valid structured output, stable scope, and a successful rescan. Real-scanner targeted verification is NOT TESTED in this review. |
+| Updater | PASS | Dry-run + lifecycle tests | `vibe-code-guard update` manages only Vibe Code Guard launchers. Scanner updates are one-tool, official-source, explicit, validated lifecycle operations. |
+| Ownership | PASS | Documentation/metadata review | Upstream scanners are independently installed, not bundled, not modified, not relicensed, and not claimed as Vibe Code Guard work. |
+| Privacy | PASS | Static review + regression tests | Normal Vibe Code Guard operations are local-only. v0.4 advisory AI is disabled by default; no real provider is included in v0.7. |
+| Scope | PASS | Runtime/security tests + real Nuclei localhost smoke | ZAP/Nuclei require localhost, local Docker, or exact explicit authorization. `0.0.0.0` and arbitrary public targets are rejected. |
+
+## Real scanner smoke boundary
+
+These checks were run read-only against the committed fixtures or a disposable
+localhost target. They are deliberately separate from the mock E2E result.
+
+| Scanner | Status | Fixture/target | Evidence and limitation |
+| --- | --- | --- | --- |
+| Gitleaks | PASS | All fixtures | Real binary found no leaks. |
+| TruffleHog | PASS | All fixtures | Real JSONL scan completed with zero findings; the sandbox printed a temporary-artifact cleanup warning but exited successfully. |
+| Semgrep | DEGRADED | Node API + local rule | Local scan was blocked by the installed binary's CA trust-store failure; no remote rule registry was used. |
+| Trivy | PASS | Node API package-lock | Real Trivy 0.73.0 parsed the lockfile and returned lodash vulnerability results with `--skip-db-update`; the DB freshness state remains separately DEGRADED. |
+| OSV-Scanner | DEGRADED | Node API package-lock | Real scanner parsed one package but could not query `api.osv.dev` in the offline environment. |
+| Checkov | DEGRADED | Docker + Terraform | Real local checks returned parseable findings (`CKV_DOCKER_2`, `CKV_DOCKER_3`, `CKV_AWS_23`); external guideline mapping lookup was unavailable. |
+| Nuclei | PASS | Disposable `127.0.0.1` server | Real Nuclei version and localhost smoke completed with no finding. No template update was performed. |
+| OWASP ZAP | PASS | Temporary HOME version smoke | Real ZAP 2.17.0 launched its version check with HOME redirected to a temporary directory; no active scan or add-on update was performed. |
+
+`PASS` in this table means the named smoke check completed. It does not mean
+the scanner is current, that every project path is covered, or that the
+project is secure.
 
 ## Validated fixture matrix
 
