@@ -4,7 +4,7 @@ const { spawnSync } = require('node:child_process');
 
 const IGNORED_DIRECTORIES = new Set([
   '.git', 'node_modules', '.venv', 'venv', '__pycache__', '.pytest_cache',
-  'dist', 'build', 'coverage', '.next', '.turbo', 'target',
+  'dist', 'build', 'coverage', 'vendor', '.next', '.turbo', 'target',
 ]);
 
 function runGit(projectPath, args) {

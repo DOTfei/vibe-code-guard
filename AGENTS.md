@@ -28,6 +28,13 @@ The canonical workflow and JSON contracts are maintained in
 [`docs/agent-integration.md`](docs/agent-integration.md). Keep this file
 short and follow that document for details.
 
+The v0.7 release-hardening contract is exercised by safe temporary fixtures in
+[`test/e2e`](test/e2e). They use mock scanners and never authorize public
+targets, real credentials, real AI providers, or host-toolchain mutation.
+Agent-facing JSON includes `schemaVersion: "1.0"` and `workflowVersion: "0.7.0"`.
+Read `releaseGate` separately from the process exit code: a completed audit can
+be `DO NOT DEPLOY` without being an operational command failure.
+
 ## When the user asks for a security audit
 
 For requests such as “security audit this project”, “check whether this app is

@@ -1,0 +1,9 @@
+{
+  "fixture": "docker",
+  "expectedStack": ["Node.js", "Docker"],
+  "expectedFindings": [
+    { "scanner": "checkov", "ruleId": "CKV_DOCKER_2", "severity": "UNKNOWN", "category": "INFRASTRUCTURE", "file": "Dockerfile" },
+    { "scanner": "checkov", "ruleId": "CKV_DOCKER_3", "severity": "UNKNOWN", "category": "INFRASTRUCTURE", "file": "Dockerfile" }
+  ],
+  "notes": "The Dockerfile is inspected as text only; no image is built or run."
+}

@@ -70,7 +70,11 @@ external-agent fix; a missing or failed relevant scanner produces
 
 Every lifecycle change is recorded with an event, timestamp, run ID, previous status, new status, and reason. A skipped or failed relevant scanner records `VERIFICATION_DEFERRED` instead of silently treating absence as a fix. New runs write a versioned `correlation.json` beside the original scanner findings and update the project-level index atomically.
 
-Older v0.2 runs without correlation data are opened safely by deriving an in-memory correlation view. Historical run files are not rewritten or silently migrated.
+Older v0.2 runs without correlation data are opened safely by deriving an
+in-memory correlation view. Later v0.3-v0.6 run metadata remains readable when
+optional correlation, verification, or advisory-review artifacts are absent;
+unknown or incomplete files are ignored rather than promoted to current
+findings. Historical run files are not rewritten or silently migrated.
 
 ## Release gate
 

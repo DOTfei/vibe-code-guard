@@ -1,0 +1,10 @@
+{
+  "fixture": "node-api",
+  "expectedStack": ["Node.js"],
+  "expectedFindings": [
+    { "scanner": "semgrep", "ruleId": "vcg.synthetic.auth-header", "severity": "HIGH", "category": "ACCESS_CONTROL", "file": "src/routes/auth.js" },
+    { "scanner": "osv-scanner", "ruleId": "CVE-2021-23337", "severity": "HIGH", "category": "DEPENDENCY_VULNERABILITY", "file": "package-lock.json" }
+  ],
+  "correlation": { "minimumObservations": 1, "releaseGate": "DO NOT DEPLOY" },
+  "notes": "The code is harmless and is never launched by the fixture test."
+}

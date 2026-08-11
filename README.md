@@ -2,7 +2,7 @@
 
 **A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
 
-`v0.6.0-alpha` · Early Alpha / Active Development · macOS tested
+`v0.7.0-alpha` · Early Alpha / Active Development · macOS Apple Silicon validated
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -37,6 +37,14 @@ workflow around them.
 See [`AGENTS.md`](AGENTS.md) and
 [`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
 agent workflow and JSON contracts.
+
+v0.7 adds a safe real-workflow validation harness using temporary projects and
+mock scanner executables. It exercises the same agent-facing install, doctor,
+audit, correlation, Dashboard, fix, targeted verification, and release-gate
+paths without changing the host toolchain or contacting public targets. See
+[`docs/public-beta-readiness.md`](docs/public-beta-readiness.md) and the
+[`v0.7 friction log`](docs/e2e-friction-log.md) for the tested boundary and
+known limitations.
 
 ## What this project is
 
@@ -385,6 +393,10 @@ Current early-alpha capabilities:
   localhost Dashboard launch, and Vibe Code Guard-only update/uninstall paths;
 - official-source upstream tool lifecycle status, installation provenance,
   engine/content separation, update plans, and offline-aware reporting.
+- v0.7 synthetic fixture coverage for React/Vite, Node API, Python, Supabase-
+  style, Docker, and Terraform projects; isolated Agent E2E tests; stable CLI
+  JSON/exit contracts; scope-cheating regression coverage; and public-beta
+  readiness documentation.
 
 Planned milestones, not current promises:
 
@@ -397,7 +409,9 @@ Planned milestones, not current promises:
   canonical audit, structured contracts, and manual fallback ✅;
 - **v0.6 — Fix → Targeted Rescan → Verify + Tool Lifecycle:** authorized
   remediation verification and official-source engine/content lifecycle ✅;
-- **v0.7 — Real-world Project Testing:** broader compatibility validation;
+- **v0.7 — Real-world Agent E2E + Release Hardening:** synthetic fixture matrix,
+  isolated agent walkthroughs, Dashboard/verification validation, CLI contract
+  checks, and release-readiness documentation ✅;
 - **v0.8 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
 - **v1.0 — Stable Security Review Platform:** after broader testing, review,
   and documentation.

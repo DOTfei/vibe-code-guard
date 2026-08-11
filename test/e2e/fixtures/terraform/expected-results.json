@@ -1,0 +1,8 @@
+{
+  "fixture": "terraform",
+  "expectedStack": ["Terraform"],
+  "expectedFindings": [
+    { "scanner": "checkov", "ruleId": "CKV_AWS_23", "severity": "UNKNOWN", "category": "INFRASTRUCTURE", "file": "main.tf" }
+  ],
+  "notes": "The Terraform is never initialized, planned, or applied."
+}

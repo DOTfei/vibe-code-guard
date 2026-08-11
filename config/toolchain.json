@@ -1,6 +1,6 @@
 {
   "manifestVersion": "1.0",
-  "workflowVersion": "0.6.0",
+  "workflowVersion": "0.7.0",
   "description": "Independently installed upstream security tools used by Vibe Code Guard.",
   "tools": [
     {

@@ -1,13 +1,13 @@
 {
   "name": "vibe-code-guard",
-  "version": "0.6.0-alpha",
+  "version": "0.7.0-alpha",
   "private": true,
   "description": "Local-first security workflow for AI coding agents and vibe-coded software.",
   "license": "Apache-2.0",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js test/e2e/*.test.js",
     "orchestrator:plan": "node orchestrator/cli.js",
     "install:orchestrator": "bash scripts/install-orchestrator.sh",
     "install:toolkit": "bash install.sh",

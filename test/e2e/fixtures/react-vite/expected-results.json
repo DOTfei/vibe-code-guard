@@ -1,0 +1,6 @@
+{
+  "fixture": "react-vite",
+  "expectedStack": ["Node.js", "React", "Vite"],
+  "expectedFindings": [],
+  "notes": "Safe UI-only fixture. No server is started and no credential is present."
+}

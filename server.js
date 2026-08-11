@@ -537,7 +537,25 @@ function runtimeTargetReachable(target, timeoutMs = 3000) {
 }
 
 async function executeScanner(run, { tool, stage, args, outputName, parser, reportPath }) {
+  if (run.abortRequested) {
+    const meta = run.tools[tool];
+    meta.status = 'STOPPED';
+    meta.decision = meta.decision || 'RUN';
+    meta.decisionReason = 'The audit was stopped before this scanner started.';
+    writeEvent(run, { kind: 'tool-stopped', stage, tool, status: 'STOPPED', message: `${meta.label} was not started because the audit was stopped.` });
+    saveRun(run);
+    return { status: 'STOPPED', findings: [] };
+  }
   const detectedVersion = await updateToolVersion(tool);
+  if (run.abortRequested) {
+    const meta = run.tools[tool];
+    meta.status = 'STOPPED';
+    meta.decision = meta.decision || 'RUN';
+    meta.decisionReason = 'The audit was stopped before this scanner started.';
+    writeEvent(run, { kind: 'tool-stopped', stage, tool, status: 'STOPPED', message: `${meta.label} was not started because the audit was stopped.` });
+    saveRun(run);
+    return { status: 'STOPPED', findings: [] };
+  }
   return new Promise((resolve) => {
     const meta = run.tools[tool];
     const started = Date.now();
@@ -1327,7 +1345,10 @@ function localMutationAuthorized(request) {
 }
 
 function sendJson(response, statusCode, payload) {
-  const body = JSON.stringify(payload);
+  const data = payload && typeof payload === 'object' && !Array.isArray(payload) && !payload.schemaVersion
+    ? { schemaVersion: SCHEMA_VERSION, ...payload }
+    : payload;
+  const body = JSON.stringify(data);
   response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
   response.end(body);
 }

@@ -76,9 +76,10 @@ unambiguous `vibe-code-guard` command when a name conflict is reported.
 
 ```json
 {
+  "schemaVersion": "1.0",
+  "workflowVersion": "0.7.0",
   "status": "READY",
-  "version": "0.6.0-alpha",
-  "workflowVersion": "0.6.0",
+  "version": "0.7.0-alpha",
   "toolchain": {
     "gitleaks": {
       "status": "READY",
@@ -103,6 +104,24 @@ unambiguous `vibe-code-guard` command when a name conflict is reported.
 Overall states are `READY`, `DEGRADED`, or `BROKEN`. A missing or unusable
 required scanner is not silently treated as ready. Network/database
 limitations are reported as degraded where the local binary remains usable.
+When a tool is `DEGRADED`, the agent may continue known-good deterministic
+checks that do not depend on the unavailable capability, but must call out the
+missing coverage and must not describe the audit as complete or secure. A
+`BROKEN` required tool blocks the workflow until the local failure is resolved.
+
+Every JSON response from the agent-facing CLI includes `schemaVersion: "1.0"`
+and `workflowVersion: "0.7.0"`. The stable command contract is:
+
+- `0`: the requested command completed. A completed audit may still have a
+  `DO NOT DEPLOY` release gate; agents must read that gate rather than infer
+  security from the process code alone;
+- `1`: an operational command failure, or targeted verification reports
+  `STILL_DETECTED`;
+- `2`: `DEGRADED`, `VERIFICATION_INCOMPLETE`, or another incomplete external
+  dependency state.
+
+This contract preserves the v0.5/v0.6 behavior while making release-gate state,
+tool health, and process execution state explicit separately.
 
 ## Audit profiles and output
 
@@ -238,3 +257,12 @@ vulnerability databases, registries, rule sources, or template sources; their
 network behavior and license terms remain separate. The installer manages
 only Vibe Code Guard-owned launchers and metadata by default. It never removes
 upstream scanners during uninstall.
+
+## v0.7 validation
+
+The repository includes safe fixtures and an E2E harness under
+[`test/e2e`](../test/e2e). The harness uses temporary roots and mock scanner
+executables to exercise the production CLI/server contracts; it does not call
+real AI providers, start vulnerable services, use real credentials, upgrade
+scanners, or scan public targets. Fixture projects are test inputs, not claims
+that the corresponding applications are secure.
