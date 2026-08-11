@@ -1,0 +1,5 @@
+{
+  "name": "vcg-fixture-node-api",
+  "private": true,
+  "dependencies": { "express": "4.18.2", "lodash": "4.17.11" }
+}

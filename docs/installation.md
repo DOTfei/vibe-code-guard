@@ -6,14 +6,15 @@ Vibe Code Guard-owned launchers under `$SECURITY_TOOLKIT_HOME` (default:
 
 ## Platform support
 
-v0.6 is intentionally conservative about platform claims:
+v0.7 is intentionally conservative about platform claims:
 
 | Platform | Status | Notes |
 | --- | --- | --- |
 | macOS Apple Silicon | SUPPORTED | Primary tested path; Homebrew and the documented ZAP cask are supported. |
 | macOS Intel | PARTIAL | The Node/launcher workflow is portable, but the exact Homebrew formulas and ZAP installation must be verified on the host. |
 | Linux | PARTIAL | The command/config/agent contracts are portable; this release does not provide a Linux package installer and official channels must be installed manually. |
-| Windows / WSL | NOT YET SUPPORTED | No Windows-specific installer or path/runtime validation is claimed. |
+| Windows | NOT SUPPORTED | No Windows-specific installer or path/runtime validation is claimed. |
+| WSL | PARTIAL | The Linux-oriented CLI may work, but WSL path, scanner, and Dashboard behavior are not validated in this release. |
 
 `doctor --json` reports the actual local state. A platform is not considered
 ready merely because the launcher starts; every required scanner and its

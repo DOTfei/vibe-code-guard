@@ -1,0 +1,8 @@
+{
+  "fixture": "supabase-style",
+  "expectedStack": ["Supabase"],
+  "expectedFindings": [
+    { "scanner": "semgrep", "ruleId": "vcg.synthetic.open-policy", "severity": "HIGH", "category": "AUTHORIZATION", "file": "supabase/migrations/001_policies.sql" }
+  ],
+  "notes": "The SQL is documentation-only and is not connected to a Supabase project."
+}

@@ -24,7 +24,7 @@ const {
   updateTool,
   uninstallLocalEntrypoints,
   validateRuntimeTarget,
-  verifyFinding,
+  withContract,
 } = require('../core/agent');
 
 const VERSION = require('../package.json').version;
@@ -60,7 +60,7 @@ function parseArgs(argv) {
 }
 
 function emit(payload, human) {
-  if (payload.json) console.log(JSON.stringify(payload.data, null, 2));
+  if (payload.json) console.log(JSON.stringify(withContract(payload.data), null, 2));
   else console.log(human);
   return payload.code ?? 0;
 }
@@ -178,8 +178,10 @@ async function commandAudit(options) {
   const { createRun, runAudit } = require('../server');
   const run = createRun({ projectPath, mode, webTarget });
   await runAudit(run);
+  const operationalFailure = run.abortRequested || Object.values(run.tools).some((tool) => ['ERROR', 'FAIL'].includes(tool.status));
+  const degraded = !operationalFailure && run.status === 'PASS WITH WARNINGS';
   const data = {
-    status: run.status === 'FAIL' ? 'FAILED' : 'COMPLETED',
+    status: operationalFailure ? 'FAILED' : 'COMPLETED',
     profile,
     runId: run.id,
     project: run.projectPath,
@@ -197,7 +199,7 @@ async function commandAudit(options) {
     config: projectConfig.config,
   };
   const human = [`Audit ${data.status}: ${data.project}`, `Profile: ${profile}`, `Run: ${data.runId}`, `Release gate: ${data.releaseGate.label}`, `Issues: ${data.issues.total} correlated (${data.issues.critical} critical, ${data.issues.high} high, ${data.issues.medium} medium, ${data.issues.low} low)`, data.dashboardUrl ? `Dashboard: ${data.dashboardUrl}` : 'Dashboard: run `vibe-code-guard dashboard` to open local history.'];
-  return emit({ json: options.json, data, code: data.status === 'FAILED' ? 1 : 0 }, human.join('\n'));
+  return emit({ json: options.json, data, code: operationalFailure ? 1 : degraded ? 2 : 0 }, human.join('\n'));
 }
 
 function lifecycleCode(result) {
@@ -233,6 +235,7 @@ async function commandTools(options) {
 }
 
 async function commandVerify(options) {
+  const { verifyFinding } = require('../server');
   const findingId = options.findingId || options.positionals[0];
   const projectInput = options.project || options.positionals[1] || '.';
   if (!findingId) throw new Error('Specify a correlated finding id.');

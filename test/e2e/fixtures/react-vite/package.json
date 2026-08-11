@@ -1,0 +1,5 @@
+{
+  "name": "vcg-fixture-react-vite",
+  "private": true,
+  "dependencies": { "react": "18.2.0", "vite": "5.0.0" }
+}

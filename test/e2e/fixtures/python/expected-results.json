@@ -1,0 +1,8 @@
+{
+  "fixture": "python",
+  "expectedStack": ["Python"],
+  "expectedFindings": [
+    { "scanner": "semgrep", "ruleId": "vcg.synthetic.python-input", "severity": "MEDIUM", "category": "INJECTION", "file": "app.py" }
+  ],
+  "notes": "No Python runtime is started and no package is installed."
+}
