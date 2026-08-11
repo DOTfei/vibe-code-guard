@@ -1,8 +1,8 @@
 {
   "name": "vibe-code-guard",
-  "version": "0.4.0-alpha",
+  "version": "0.5.0-alpha",
   "private": true,
-  "description": "Local-first security orchestration and dashboard for AI-assisted software development.",
+  "description": "Local-first security workflow for AI coding agents and vibe-coded software.",
   "license": "Apache-2.0",
   "scripts": {
     "start": "node server.js",
@@ -10,7 +10,15 @@
     "test": "node --test test/*.test.js",
     "orchestrator:plan": "node orchestrator/cli.js",
     "install:orchestrator": "bash scripts/install-orchestrator.sh",
-    "ai-review": "node orchestrator/cli.js ai-review"
+    "install:toolkit": "bash install.sh",
+    "install-toolkit": "bash install.sh",
+    "ai-review": "node orchestrator/cli.js ai-review",
+    "audit": "node bin/vibe-code-guard.js audit",
+    "doctor": "node bin/vibe-code-guard.js doctor"
+  },
+  "bin": {
+    "vibe-code-guard": "bin/vibe-code-guard.js",
+    "security-check": "bin/vibe-code-guard.js"
   },
   "engines": {
     "node": ">=18"

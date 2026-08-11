@@ -1,0 +1,96 @@
+{
+  "manifestVersion": "1.0",
+  "workflowVersion": "0.5.0",
+  "description": "Independently installed upstream security tools used by Vibe Code Guard.",
+  "tools": [
+    {
+      "id": "gitleaks",
+      "displayName": "Gitleaks",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "synthetic secret finding"},
+      "supportedVersionRange": ">=8.0.0",
+      "candidates": ["gitleaks"],
+      "versionArgs": ["version"],
+      "install": {"type": "brew", "formula": "gitleaks", "official": "https://github.com/gitleaks/gitleaks"}
+    },
+    {
+      "id": "trufflehog",
+      "displayName": "TruffleHog",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "synthetic detector finding"},
+      "supportedVersionRange": ">=3.0.0",
+      "candidates": ["trufflehog"],
+      "versionArgs": ["--version"],
+      "install": {"type": "brew", "formula": "trufflehog", "official": "https://github.com/trufflesecurity/trufflehog"}
+    },
+    {
+      "id": "semgrep",
+      "displayName": "Semgrep",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "local synthetic rule match"},
+      "supportedVersionRange": ">=1.0.0",
+      "candidates": ["semgrep"],
+      "versionArgs": ["--version"],
+      "install": {"type": "brew", "formula": "semgrep", "official": "https://github.com/semgrep/semgrep"}
+    },
+    {
+      "id": "trivy",
+      "displayName": "Trivy",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "synthetic vulnerability and usable database"},
+      "supportedVersionRange": ">=0.50.0",
+      "candidates": ["trivy"],
+      "versionArgs": ["--version"],
+      "install": {"type": "brew", "formula": "trivy", "official": "https://github.com/aquasecurity/trivy"}
+    },
+    {
+      "id": "osv-scanner",
+      "displayName": "OSV-Scanner",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "synthetic lockfile processing"},
+      "supportedVersionRange": ">=2.0.0",
+      "candidates": ["osv-scanner"],
+      "versionArgs": ["--version"],
+      "install": {"type": "brew", "formula": "osv-scanner", "official": "https://github.com/google/osv-scanner"}
+    },
+    {
+      "id": "checkov",
+      "displayName": "Checkov",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "synthetic IaC finding"},
+      "supportedVersionRange": ">=3.0.0",
+      "candidates": ["checkov"],
+      "versionArgs": ["--version"],
+      "install": {"type": "pipx", "package": "checkov", "official": "https://github.com/bridgecrewio/checkov", "fallback": "python3 -m pip install --user checkov"}
+    },
+    {
+      "id": "zap",
+      "displayName": "OWASP ZAP",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "local launcher health"},
+      "supportedVersionRange": ">=2.14.0",
+      "candidates": ["zap", "zap.sh", "/Applications/ZAP.app/Contents/Java/zap.sh"],
+      "versionArgs": ["-version"],
+      "versionPattern": "\\bZAP(?:\\s+|/)[v]?([0-9]+\\.[0-9]+(?:\\.[0-9]+)?)",
+      "install": {"type": "brew-cask", "cask": "owasp-zap", "official": "https://github.com/zaproxy/zaproxy"}
+    },
+    {
+      "id": "nuclei",
+      "displayName": "Nuclei",
+      "required": true,
+      "doctorCheck": "binary-and-version",
+      "selfTest": {"runner": "security-tools self-test --json", "expected": "local template engine health"},
+      "supportedVersionRange": ">=3.0.0",
+      "candidates": ["nuclei"],
+      "versionArgs": ["-version"],
+      "install": {"type": "brew", "formula": "nuclei", "official": "https://github.com/projectdiscovery/nuclei"}
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const path = require('node:path');
+const version = require('../package.json').version;
 const { buildExecutionPlan } = require('./index');
 const { runAIReviewCLI } = require('./ai-review-cli');
 
@@ -18,7 +19,7 @@ function parseArgs(argv) {
 
 function humanPlan(plan) {
   const lines = [
-    'Vibe Code Guard v0.4.0-alpha',
+    `Vibe Code Guard v${version}`,
     `Target: ${plan.projectPath}`,
     `Change source: ${plan.changeSet.source}`,
     `Categories: ${plan.categories.join(', ')}`,
