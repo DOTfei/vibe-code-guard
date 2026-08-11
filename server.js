@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { buildExecutionPlan } = require('./orchestrator');
 const {
@@ -25,6 +26,7 @@ const {
   reconcileFindings,
 } = require('./core/correlation');
 const {
+  projectScopeFingerprint,
   verificationCoverage,
   verificationOutcome,
   verificationPlan,
@@ -34,6 +36,7 @@ const {
   lifecycleStatus,
   refreshContent,
   updateTool,
+  withToolLock,
 } = require('./core/agent/tool-lifecycle');
 const {
   AI_REVIEW_SCHEMA_VERSION,
@@ -473,24 +476,73 @@ function updateToolVersion(tool) {
     trivy: ['--version'],
     'osv-scanner': ['--version'],
     checkov: ['--version'],
+    zap: ['-version'],
     nuclei: ['-version'],
   };
   return new Promise((resolve) => {
     const command = resolveBinary(tool);
     const child = spawn(command, commands[tool] || ['--version'], { env: COMMAND_ENV });
     let output = '';
-    child.stdout.on('data', (chunk) => { output += chunk; });
-    child.stderr.on('data', (chunk) => { output += chunk; });
-    child.on('close', () => resolve(redact(output).trim().split('\n')[0] || null));
-    child.on('error', () => resolve(null));
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const append = (chunk) => { output = `${output}${chunk}`.slice(-8192); };
+    child.stdout.on('data', append);
+    child.stderr.on('data', append);
+    const timer = setTimeout(() => { child.kill('SIGTERM'); finish(null); }, 5000);
+    child.on('close', () => {
+      const match = redact(output).match(/(?:^|[^0-9A-Za-z.])v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)((?:[-+][0-9A-Za-z.-]+)?)(?:$|[^0-9A-Za-z.])/);
+      finish(match ? `${match[1]}.${match[2]}.${match[3]}${match[4]}` : null);
+    });
+    child.on('error', () => finish(null));
   });
 }
 
-function executeScanner(run, { tool, stage, args, outputName, parser, reportPath }) {
+function validateScannerOutput(tool, text) {
+  const value = String(text || '').trim();
+  const jsonLines = new Set(['trufflehog', 'nuclei']);
+  if (jsonLines.has(tool)) {
+    if (!value) return { valid: true };
+    const invalid = value.split('\n').some((line) => {
+      try { JSON.parse(line); return false; } catch { return true; }
+    });
+    return invalid ? { valid: false, reason: `${tool} emitted malformed JSONL output.` } : { valid: true };
+  }
+  if (!value) return { valid: false, reason: `${tool} emitted no structured output.` };
+  try { JSON.parse(value); return { valid: true }; } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
+}
+
+function runtimeTargetReachable(target, timeoutMs = 3000) {
+  if (!target) return Promise.resolve(false);
+  let parsed;
+  try { parsed = new URL(target); } catch { return Promise.resolve(false); }
+  const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = net.connect({ host: parsed.hostname, port });
+    const finish = (reachable) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(reachable);
+    };
+    socket.setTimeout(timeoutMs, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+}
+
+async function executeScanner(run, { tool, stage, args, outputName, parser, reportPath }) {
+  const detectedVersion = await updateToolVersion(tool);
   return new Promise((resolve) => {
     const meta = run.tools[tool];
     const started = Date.now();
     meta.status = 'RUNNING';
+    meta.version = detectedVersion || meta.version || null;
     meta.startedAt = isoNow();
     writeEvent(run, { kind: 'tool-started', stage, tool, message: `${meta.label} started` });
     saveRun(run);
@@ -513,7 +565,8 @@ function executeScanner(run, { tool, stage, args, outputName, parser, reportPath
       const output = `${safeStdout}${safeStderr ? `\n${safeStderr}` : ''}`;
       if (outputName) atomicWrite(path.join(run.dir, outputName), output);
       if (reportPath && fs.existsSync(reportPath)) atomicWrite(reportPath, redact(parserInput));
-      const findings = (parser || parserFor(tool))(parserInput, run);
+      const parseCheck = validateScannerOutput(tool, parserInput);
+      const findings = parseCheck.valid ? (parser || parserFor(tool))(parserInput, run) : [];
       run.findings.push(...findings);
       run.summary = countFindings(run.findings);
       meta.findingsCount = findings.length;
@@ -521,8 +574,11 @@ function executeScanner(run, { tool, stage, args, outputName, parser, reportPath
       meta.durationMs = Date.now() - started;
       meta.finishedAt = isoNow();
       meta.version = meta.version || null;
+      meta.parseValid = parseCheck.valid;
+      meta.parseError = parseCheck.valid ? null : parseCheck.reason;
       if (run.abortRequested || error?.code === 'ABORT_ERR') meta.status = 'STOPPED';
       else if (error || exitCode === null) { meta.status = 'ERROR'; meta.error = redact(error?.message || 'Process failed to start'); }
+      else if (!parseCheck.valid) { meta.status = 'FAIL'; meta.error = parseCheck.reason; }
       else if (exitCode > 1) { meta.status = 'FAIL'; meta.error = `Scanner exited with code ${exitCode}.`; }
       else meta.status = 'PASS';
       writeEvent(run, {
@@ -555,17 +611,29 @@ function targetedScannerSpec(tool, run) {
 function verificationFinding(projectPath, findingId) {
   const project = projectIdentity(projectPath);
   const index = readProjectIndex(project.id);
-  return { project, index, finding: index.findings.find((item) => item.id === findingId) || null };
+  if (!/^VCG-CORR-[A-F0-9]{14}$/.test(String(findingId || ''))) return { project, index, finding: null, invalidReason: 'Finding id is not a valid correlated finding id.' };
+  const finding = index.findings.find((item) => item.id === findingId) || null;
+  if (!finding) return { project, index, finding: null, invalidReason: `Correlated finding ${findingId} was not found for this project.` };
+  const historyValid = (finding.observations || []).length > 0 && finding.observations.every((observation) => {
+    if (!isValidRunId(observation.runId)) return false;
+    try {
+      const metadata = JSON.parse(fs.readFileSync(path.join(DATA_DIR, observation.runId, 'metadata.json'), 'utf8'));
+      return projectIdentity(metadata.projectPath || '').id === project.id && (!metadata.projectId || metadata.projectId === project.id);
+    } catch { return false; }
+  });
+  return { project, index, finding: historyValid ? finding : null, invalidReason: historyValid ? null : 'Finding history is missing, invalid, or belongs to a different project.' };
 }
 
 function createVerificationRun({ projectPath, findingId, webTarget }) {
+  const authorizedWebTarget = webTarget ? safeWebTarget(webTarget) : null;
+  if (webTarget && !authorizedWebTarget) throw new Error('Runtime verification target is not localhost or explicitly authorized.');
   const located = verificationFinding(projectPath, findingId);
-  if (!located.finding) throw new Error(`Correlated finding ${findingId} was not found for this project.`);
+  if (!located.finding) throw new Error(located.invalidReason || `Correlated finding ${findingId} was not found for this project.`);
   if (['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(located.finding.status)) throw new Error('User-controlled FALSE_POSITIVE and ACCEPTED_RISK findings cannot be automatically verified.');
   if (located.finding.status === 'OPEN') throw new Error('Mark the finding FIXING or FIXED after an authorized external fix before targeted verification.');
-  const plan = verificationPlan(located.finding, { webTarget });
+  const plan = verificationPlan(located.finding, { webTarget: authorizedWebTarget });
   if (plan.authorizationRequired) throw new Error(plan.reason);
-  const run = createRun({ projectPath, mode: 'verify', webTarget, verification: { findingId, plan, status: 'STARTING' } });
+  const run = createRun({ projectPath, mode: 'verify', webTarget: authorizedWebTarget, verification: { findingId, plan, status: 'STARTING' } });
   const current = readProjectIndex(located.project.id);
   const target = current.findings.find((item) => item.id === findingId);
   appendHistory(target, { event: 'VERIFICATION_STARTED', runId: run.id, previousStatus: target.status, newStatus: target.status, reason: 'Targeted verification was requested after an authorized external fix attempt.' }, { runId: run.id, timestamp: isoNow() });
@@ -582,6 +650,7 @@ async function runTargetedVerification(run) {
   if (!located.finding) throw new Error(`Correlated finding ${run.verification.findingId} disappeared before verification started.`);
   const plan = verificationPlan(located.finding, { webTarget: run.webTarget });
   run.verification.plan = plan;
+  const initialScopeFingerprint = projectScopeFingerprint(run.projectPath, located.finding.location?.file || null, run.webTarget);
   stageStart(run, 'discovery');
   const discovery = detectStack(run.projectPath);
   run.stack = discovery.stack;
@@ -595,7 +664,15 @@ async function runTargetedVerification(run) {
     }
   }
   stageStart(run, 'rescan');
+  const runtimeScanners = plan.relevantScanners.filter((item) => ['zap', 'nuclei'].includes(item));
+  const runtimeReachable = runtimeScanners.length === 0 || await runtimeTargetReachable(run.webTarget);
   for (const toolId of plan.relevantScanners) {
+    if (runtimeScanners.includes(toolId) && !runtimeReachable) {
+      run.tools[toolId].status = 'SKIPPED';
+      run.tools[toolId].decision = 'SKIP';
+      run.tools[toolId].decisionReason = 'The authorized runtime target was not reachable before active verification.';
+      continue;
+    }
     const spec = targetedScannerSpec(toolId, run);
     if (!spec) {
       run.tools[toolId].status = 'SKIPPED';
@@ -606,8 +683,11 @@ async function runTargetedVerification(run) {
     if (spec.stage === 'web' && run.stages.web.status !== 'RUNNING') stageStart(run, 'web');
     await executeScanner(run, { tool: toolId, ...spec, parser: null });
   }
-  if (run.stages.web.status === 'RUNNING') stageFinish(run, 'web', plan.relevantScanners.filter((item) => ['zap', 'nuclei'].includes(item)).every((item) => run.tools[item].status === 'PASS') ? 'PASS' : 'FAIL', `Authorized target: ${run.webTarget || 'none'}`);
-  const coverage = verificationCoverage(plan, run.tools, { webTarget: run.webTarget });
+  if (runtimeScanners.length && run.stages.web.status === 'WAITING') stageStart(run, 'web');
+  if (run.stages.web.status === 'RUNNING') stageFinish(run, 'web', runtimeScanners.every((item) => run.tools[item].status === 'PASS') ? 'PASS' : 'FAIL', runtimeReachable ? `Authorized target: ${run.webTarget || 'none'}` : 'Authorized runtime target was unreachable.');
+  const currentScopeFingerprint = projectScopeFingerprint(run.projectPath, located.finding.location?.file || null, run.webTarget);
+  const stableScopeFingerprint = initialScopeFingerprint && initialScopeFingerprint === currentScopeFingerprint ? currentScopeFingerprint : null;
+  const coverage = verificationCoverage(plan, run.tools, { webTarget: run.webTarget, currentScopeFingerprint: stableScopeFingerprint });
   stageFinish(run, 'rescan', coverage.complete ? 'PASS' : 'FAIL', coverage.reason);
   skipStage(run, 'manual', 'Manual security review is not part of targeted scanner verification.');
   skipStage(run, 'fix', 'The external coding agent owns code changes; Vibe Code Guard only verifies them.');
@@ -622,12 +702,13 @@ async function runTargetedVerification(run) {
     tools: run.tools,
     stages: run.stages,
     webTarget: run.webTarget,
+    verificationScopeValid: coverage.complete,
   });
   const updatedFinding = reconciled.findings[0] || existing;
   current.findings = current.findings.map((item) => item.id === run.verification.findingId ? updatedFinding : item);
   saveProjectIndex(current);
   const outcome = verificationOutcome({ finding: existing, updatedFinding, coverage });
-  run.verification = { ...run.verification, plan, coverage, ...outcome, completedAt: isoNow() };
+  run.verification = { ...run.verification, plan, coverage, initialScopeFingerprint, currentScopeFingerprint, scopeStableDuringScan: Boolean(stableScopeFingerprint), runtimeReachable, ...outcome, completedAt: isoNow() };
   run.correlatedFindings = current.findings;
   run.correlatedSummary = countCorrelatedFindings(run.correlatedFindings);
   run.summary = run.correlatedSummary;
@@ -649,11 +730,14 @@ async function runTargetedVerification(run) {
 }
 
 async function verifyFinding({ projectPath, findingId, webTarget = null }) {
+  const authorizedProjectPath = safeProjectPath(projectPath);
+  if (!authorizedProjectPath) throw new Error('Verification target must be a safe existing local project directory.');
+  projectPath = authorizedProjectPath;
   const active = [...runs.values()].find((run) => run.projectPath === projectPath && run.status === 'SCANNING');
   if (active) throw new Error(`A scan is already running for this project: ${active.id}`);
   const created = createVerificationRun({ projectPath, findingId, webTarget });
   try {
-    return await runTargetedVerification(created.run);
+    return await withToolLock(TOOLKIT_HOME, `verify:${created.run.id}`, () => runTargetedVerification(created.run));
   } catch (error) {
     created.run.status = 'FAIL';
     created.run.finishedAt = isoNow();
@@ -675,11 +759,16 @@ async function verifyFinding({ projectPath, findingId, webTarget = null }) {
 function safeProjectPath(input) {
   if (typeof input !== 'string' || !input.trim() || input.includes('\0') || input.includes('://')) return null;
   const resolved = path.resolve(input.trim());
-  const forbidden = [path.parse(resolved).root, os.homedir(), TOOLKIT_HOME, DATA_DIR];
-  if (forbidden.includes(resolved)) return null;
   try {
-    const stats = fs.statSync(resolved);
-    return stats.isDirectory() ? resolved : null;
+    const real = fs.realpathSync(resolved);
+    const stats = fs.statSync(real);
+    const within = (candidate, parent) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+    const root = path.parse(real).root;
+    const home = fs.realpathSync(os.homedir());
+    const toolkit = fs.existsSync(TOOLKIT_HOME) ? fs.realpathSync(TOOLKIT_HOME) : path.resolve(TOOLKIT_HOME);
+    const data = fs.existsSync(DATA_DIR) ? fs.realpathSync(DATA_DIR) : path.resolve(DATA_DIR);
+    if (real === root || real === home || within(real, toolkit) || within(real, data)) return null;
+    return stats.isDirectory() ? real : null;
   } catch {
     return null;
   }
@@ -1224,6 +1313,19 @@ async function readBody(request) {
   return body ? JSON.parse(body) : {};
 }
 
+function localMutationAuthorized(request) {
+  const contentType = String(request.headers['content-type'] || '').toLowerCase();
+  if (!contentType.startsWith('application/json')) return false;
+  if (request.headers['x-vibe-code-guard-action'] !== 'confirmed') return false;
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsed = new URL(origin);
+    const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    return ['127.0.0.1', 'localhost', '::1'].includes(host);
+  } catch { return false; }
+}
+
 function sendJson(response, statusCode, payload) {
   const body = JSON.stringify(payload);
   response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -1459,14 +1561,16 @@ const server = http.createServer(async (request, response) => {
     if (request.method === 'GET' && pathname === '/api/toolkit/lifecycle') return sendJson(response, 200, await lifecycleStatus());
     if (request.method === 'POST' && pathname === '/api/toolkit/check-updates') return sendJson(response, 200, await checkUpdates());
     if (request.method === 'POST' && pathname === '/api/toolkit/update') {
+      if (!localMutationAuthorized(request)) return sendJson(response, 403, { error: 'Local lifecycle mutation requires JSON and the explicit X-Vibe-Code-Guard-Action confirmation header.' });
       const body = await readBody(request);
       if (typeof body.scanner !== 'string' || !body.scanner.trim()) return sendJson(response, 400, { error: 'Specify one scanner.' });
-      return sendJson(response, 200, await updateTool(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true }));
+      return sendJson(response, 200, await updateTool(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true, securityReviewed: body.securityReviewed === true }));
     }
     if (request.method === 'POST' && pathname === '/api/toolkit/refresh-data') {
+      if (!localMutationAuthorized(request)) return sendJson(response, 403, { error: 'Local lifecycle mutation requires JSON and the explicit X-Vibe-Code-Guard-Action confirmation header.' });
       const body = await readBody(request);
       if (typeof body.scanner !== 'string' || !body.scanner.trim()) return sendJson(response, 400, { error: 'Specify one scanner.' });
-      return sendJson(response, 200, await refreshContent(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true }));
+      return sendJson(response, 200, await refreshContent(body.scanner, { dryRun: body.dryRun !== false, yes: body.confirm === true, securityReviewed: body.securityReviewed === true }));
     }
     if (request.method === 'POST' && pathname === '/api/toolkit/self-test') {
       const result = await runFixedCommand('security-tools', ['self-test']);

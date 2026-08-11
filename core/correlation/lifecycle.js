@@ -39,6 +39,7 @@ function eventForStatus(status) {
 function isVerificationEligible(finding, context = {}) {
   const observations = Array.isArray(finding?.observations) ? finding.observations : [];
   if (!observations.length) return false;
+  if (context.verificationScopeValid === false) return false;
   const tools = context.tools || {};
   const statuses = context.scannerStatuses || {};
   for (const observation of observations) {
@@ -47,6 +48,7 @@ function isVerificationEligible(finding, context = {}) {
     const status = tool?.status || statuses[scanner];
     if (status !== 'PASS') return false;
     if (tool?.decision && tool.decision !== 'RUN') return false;
+    if (tool && Object.prototype.hasOwnProperty.call(tool, 'parseValid') && tool.parseValid !== true) return false;
     if (['zap', 'nuclei'].includes(scanner) && (context.stages?.web?.status !== 'PASS' || !context.webTarget)) return false;
   }
   return true;

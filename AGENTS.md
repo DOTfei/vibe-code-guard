@@ -73,7 +73,10 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 11. After the authorized fix, mark the finding `FIXING` or `FIXED`, then run
     `vibe-code-guard verify <finding-id> <project> --json`. Do not mark a
     finding verified directly. A skipped, failed, degraded, or out-of-scope
-    relevant scanner produces `VERIFICATION_INCOMPLETE`.
+    relevant scanner, malformed structured output, unknown scanner version,
+    unreachable runtime target, or changed scanner/ignore scope produces
+    `VERIFICATION_INCOMPLETE`. Changing an ignore file, exclusion, rule
+    configuration, or runtime target is not proof that the defect was fixed.
 12. Report the release decision, limitations, skipped checks, and Dashboard
     URL. A clean result is not a security guarantee.
 
@@ -92,7 +95,9 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 - Do not update scanners blindly. `vibe-code-guard update` updates only the
   Vibe Code Guard-owned launcher. Scanner lifecycle commands update one named
   upstream tool only through its fixed official channel after explicit
-  confirmation and validation.
+  confirmation and validation. Never replace repository-controlled upstream
+  sources or treat cached lifecycle state as more authoritative than the real
+  binary, version check, and self-test.
 
 ## User prompt
 

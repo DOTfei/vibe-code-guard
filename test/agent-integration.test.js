@@ -19,6 +19,9 @@ test('toolchain manifest records all required upstream tools without bundling th
   assert.ok(manifest.tools.every((tool) => typeof tool.supportedVersionRange === 'string'));
   assert.ok(manifest.tools.every((tool) => tool.doctorCheck && tool.selfTest?.runner));
   assert.ok(manifest.tools.every((tool) => tool.install?.official?.startsWith('https://github.com/')));
+  assert.ok(manifest.tools.every((tool) => tool.upstream?.officialRepository?.startsWith('https://github.com/')));
+  assert.ok(manifest.tools.every((tool) => tool.update?.officialSource?.startsWith('https://')));
+  assert.ok(manifest.tools.filter((tool) => tool.contentUpdates?.supported).every((tool) => tool.contentUpdates.officialSource?.startsWith('https://')));
   assert.ok(manifest.tools.every((tool) => !tool.binary || !fs.existsSync(path.join(ROOT, tool.binary))));
 });
 
@@ -140,6 +143,12 @@ test('non-default tool paths are resolved without shell execution', async () => 
     const incompatible = await inspectTool({ id: 'old', displayName: 'Old', required: true, candidates: ['old-scanner'], versionArgs: ['--version'], supportedVersionRange: '>=1.0.0', install: { type: 'manual' } });
     assert.equal(incompatible.status, 'DEGRADED');
     assert.match(incompatible.reason, /below the supported range/);
+    const malformed = path.join(directory, 'malformed-scanner');
+    fs.writeFileSync(malformed, '#!/bin/sh\nprintf "1.2\\n"\n');
+    fs.chmodSync(malformed, 0o755);
+    const unknown = await inspectTool({ id: 'malformed', displayName: 'Malformed', required: true, candidates: ['malformed-scanner'], versionArgs: ['--version'], supportedVersionRange: '>=1.0.0', install: { type: 'manual' } });
+    assert.equal(unknown.status, 'DEGRADED');
+    assert.equal(unknown.versionNumber, null);
   } finally {
     if (previous === undefined) delete process.env.SECURITY_TOOL_PATHS;
     else process.env.SECURITY_TOOL_PATHS = previous;
@@ -153,8 +162,8 @@ test('agent audit dry run returns structured output without invoking scanners', 
   const result = JSON.parse(output);
   assert.equal(result.status, 'PLANNED');
   assert.equal(result.profile, 'quick');
-  assert.equal(result.project, project);
-  assert.equal(result.plan.projectPath, project);
+  assert.equal(result.project, fs.realpathSync(project));
+  assert.equal(result.plan.projectPath, fs.realpathSync(project));
 });
 
 test('agent version command is stable and package aliases remain available', () => {

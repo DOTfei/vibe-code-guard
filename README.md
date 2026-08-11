@@ -76,7 +76,10 @@ repeatable security workflow in every AI-assisted coding repository.
 
 Vibe Code Guard does not claim the upstream detection engines as its own work.
 The individual tools remain responsible for their own scanning behavior and
-licenses.
+licenses. Their versions, releases, rules, databases, templates, and add-ons
+come from the respective upstream projects; Vibe Code Guard does not own or
+guarantee those artifacts and only validates local compatibility and
+known-good state where supported.
 
 ## The problem we solve
 

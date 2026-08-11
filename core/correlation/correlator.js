@@ -4,6 +4,7 @@ const { compareConfidence } = require('./confidence');
 const { automaticLifecycle, isVerificationEligible, appendHistory } = require('./lifecycle');
 const { normalizeSeverity } = require('../findings/severity');
 const { normalizeCategory } = require('../findings/category');
+const { projectScopeFingerprint } = require('../verification');
 
 const CORRELATION_SCHEMA_VERSION = '1.0';
 const SEVERITY_RANK = Object.freeze({ UNKNOWN: 0, INFO: 1, LOW: 2, MEDIUM: 3, HIGH: 4, CRITICAL: 5 });
@@ -24,8 +25,10 @@ function safeLocation(identity) {
 
 function observationFromFinding(finding, context = {}) {
   const identity = deriveIdentity(finding, context);
+  const scanner = String(finding.scanner?.id || 'unknown').toLowerCase();
   return {
-    scanner: String(finding.scanner?.id || 'unknown').toLowerCase(),
+    scanner,
+    scannerVersion: context.tools?.[scanner]?.version || finding.scannerVersion || null,
     scannerFindingId: String(finding.id || '').slice(0, 200),
     fingerprint: String(finding.fingerprint || '').slice(0, 200),
     ruleId: String(finding.scanner?.ruleId || '').slice(0, 200) || null,
@@ -76,6 +79,7 @@ function createGroup(findings, context = {}) {
     category: normalizeCategory(first.category),
     status: preservedStatus,
     confidence: 'EXACT',
+    scopeFingerprint: projectScopeFingerprint(context.projectPath, first.location?.file || null, context.webTarget || null),
     location: safeLocation(identity),
     observations: [],
     firstSeen: findings.map((finding) => finding.firstSeen).filter(Boolean).sort()[0] || timestamp,

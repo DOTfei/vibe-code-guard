@@ -31,7 +31,7 @@ const VERSION = require('../package.json').version;
 const PROFILES = new Set(['auto', 'quick', 'full', 'release']);
 
 function usage() {
-  return `Vibe Code Guard ${VERSION}\n\nUsage:\n  vibe-code-guard install [--dry-run] [--yes] [--json]\n  vibe-code-guard doctor [--json]\n  vibe-code-guard audit [project] [--profile auto|quick|full|release] [--json]\n  vibe-code-guard verify <finding-id> [project] [--web-target URL] [--json]\n  vibe-code-guard rescan --finding <finding-id> [--project project] [--web-target URL] [--json]\n  vibe-code-guard tools status [--json]\n  vibe-code-guard tools check-updates [--json]\n  vibe-code-guard tools update [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard tools refresh-data [scanner] [--dry-run|--yes] [--json]\n  vibe-code-guard dashboard [--port PORT] [--json] [--dry-run]\n  vibe-code-guard update [--check] [--yes] [--json]\n  vibe-code-guard uninstall [--dry-run] [--yes] [--json]\n  vibe-code-guard version\n\nAliases:\n  security-check audit .\n\nInstallation never changes shell startup files and never removes upstream scanners.`;
+  return `Vibe Code Guard ${VERSION}\n\nUsage:\n  vibe-code-guard install [--dry-run] [--yes] [--json]\n  vibe-code-guard doctor [--json]\n  vibe-code-guard audit [project] [--profile auto|quick|full|release] [--json]\n  vibe-code-guard verify <finding-id> [project] [--web-target URL] [--json]\n  vibe-code-guard rescan --finding <finding-id> [--project project] [--web-target URL] [--json]\n  vibe-code-guard tools status [--json]\n  vibe-code-guard tools check-updates [--json]\n  vibe-code-guard tools update [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard tools refresh-data [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard dashboard [--port PORT] [--json] [--dry-run]\n  vibe-code-guard update [--check] [--yes] [--json]\n  vibe-code-guard uninstall [--dry-run] [--yes] [--json]\n  vibe-code-guard version\n\nAliases:\n  security-check audit .\n\nInstallation never changes shell startup files and never removes upstream scanners.`;
 }
 
 function parseArgs(argv) {
@@ -128,12 +128,15 @@ function summarizeSelfTest(result) {
 function safeProjectRoot(input) {
   if (typeof input !== 'string' || !input.trim() || input.includes('\0') || input.includes('://')) throw new Error('Audit target must be an existing local directory path.');
   const resolved = path.resolve(input);
-  const home = os.homedir();
-  const toolkit = TOOLKIT_HOME();
-  if ([path.parse(resolved).root, home, toolkit].includes(resolved)) throw new Error('Refusing to audit a filesystem root, home directory, or security-toolkit directory.');
-  const stat = fs.statSync(resolved);
+  const real = fs.realpathSync(resolved);
+  const home = fs.realpathSync(os.homedir());
+  const toolkitPath = TOOLKIT_HOME();
+  const toolkit = fs.existsSync(toolkitPath) ? fs.realpathSync(toolkitPath) : path.resolve(toolkitPath);
+  const within = (candidate, parent) => candidate === parent || candidate.startsWith(`${parent}${path.sep}`);
+  if (real === path.parse(real).root || real === home || within(real, toolkit)) throw new Error('Refusing to audit a filesystem root, home directory, or security-toolkit directory.');
+  const stat = fs.statSync(real);
   if (!stat.isDirectory()) throw new Error('Audit target must be a directory.');
-  return resolved;
+  return real;
 }
 
 function selectRuntimeTarget(configTargets, explicit) {
@@ -198,7 +201,7 @@ async function commandAudit(options) {
 }
 
 function lifecycleCode(result) {
-  return result.overall === 'BROKEN' || result.state === 'BROKEN' ? 1 : result.overall === 'DEGRADED' || ['DEGRADED', 'UPDATE_CHECK_UNAVAILABLE', 'VERIFICATION_REQUIRED', 'SECURITY_REVIEW_REQUIRED'].includes(result.state) ? 2 : 0;
+  return result.overall === 'BROKEN' || result.state === 'BROKEN' ? 1 : result.overall === 'DEGRADED' || ['BUSY', 'DEGRADED', 'UPDATE_CHECK_UNAVAILABLE', 'VERIFICATION_REQUIRED', 'SECURITY_REVIEW_REQUIRED', 'MANUAL_REVIEW_REQUIRED'].includes(result.state) ? 2 : 0;
 }
 
 async function commandTools(options) {
@@ -210,7 +213,7 @@ async function commandTools(options) {
   }
   if (subcommand === 'check-updates') {
     const result = await checkUpdates();
-    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Official update check: ${result.overall}\n${Object.values(result.tools).map((tool) => `${tool.displayName}: ${tool.updateCheck === 'UPDATE_CHECK_UNAVAILABLE' ? 'UNKNOWN — update status could not be verified' : tool.updateAvailable ? `UPDATE_AVAILABLE (${tool.latestStableVersion})` : 'CURRENT'}`).join('\n')}`);
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Official update check: ${result.overall}\n${Object.values(result.tools).map((tool) => `${tool.displayName}: ${['BROKEN', 'NOT_INSTALLED', 'DEGRADED'].includes(tool.state) ? tool.state : tool.updateCheck === 'UPDATE_CHECK_UNAVAILABLE' ? 'UNKNOWN — update status could not be verified' : tool.updateAvailable ? `UPDATE_AVAILABLE (${tool.latestStableVersion})` : 'CURRENT'}`).join('\n')}`);
   }
   if (subcommand === 'update' && !scanner) {
     const result = await lifecycleStatus();
@@ -223,8 +226,8 @@ async function commandTools(options) {
     return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Tool update ${scanner}: ${result.state}\n${result.reason || ''}`.trim());
   }
   if (subcommand === 'refresh-data') {
-    const result = await refreshContent(scanner, { dryRun: options.dryRun || !options.yes, yes: options.yes });
-    return emit({ json: options.json, data: result, code: result.state === 'DEGRADED' ? 2 : 0 }, `Content refresh ${scanner}: ${result.state}\n${result.reason || ''}`.trim());
+    const result = await refreshContent(scanner, { dryRun: options.dryRun || !options.yes, yes: options.yes, securityReviewed: options.securityReviewed });
+    return emit({ json: options.json, data: result, code: lifecycleCode(result) }, `Content refresh ${scanner}: ${result.state}\n${result.reason || ''}`.trim());
   }
   throw new Error(`Unknown tools command: ${subcommand}`);
 }

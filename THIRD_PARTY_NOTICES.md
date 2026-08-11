@@ -6,6 +6,11 @@ toolkit invokes locally installed command-line tools or applications through
 explicit adapters and allowlists. Each upstream project retains its own
 copyright, trademarks, and license.
 
+Versions, releases, databases, rules, templates, and add-ons are published by
+their respective upstream projects. Vibe Code Guard does not own or guarantee
+those releases; it only applies repository-controlled source policy,
+compatibility checks, and local known-good validation where supported.
+
 The machine-specific binary paths and local installation details are
 intentionally excluded from this public notice. See `third-party/tools.json`
 and `security-toolchain.lock` for portable integration metadata.

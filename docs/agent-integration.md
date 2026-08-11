@@ -188,6 +188,12 @@ runtime findings use ZAP/Nuclei only when an authorized runtime target is in
 scope. A skipped, failed, degraded, or out-of-scope relevant scanner cannot
 establish `VERIFIED`.
 
+Verification also compares a bounded fingerprint of project scanner configs,
+ignore files, the target-file boundary, and any runtime target before and
+after the rescan. A scope/config change, malformed structured output, unknown
+scanner version, unreachable runtime target, or missing observation history
+returns `VERIFICATION_INCOMPLETE`; suppressing a rule is not remediation.
+
 The activity trail records the verification request, selected scanners,
 coverage, result, and lifecycle transition. `FALSE_POSITIVE` and
 `ACCEPTED_RISK` remain user-controlled and are never changed by verification.

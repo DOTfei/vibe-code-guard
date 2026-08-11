@@ -53,6 +53,12 @@ keeps an open issue open, returns an attempted fix to `OPEN`, and changes
 
 Absence is not proof of a fix. A finding is eligible for verification only when every relevant scanner represented by its observations completed with status `PASS`, was selected to run, and covered the relevant scope. Runtime observations additionally require a successful web stage and an authorized target.
 
+v0.6 records the scanner version used for each observation and targeted
+verification. It also requires valid structured output and an unchanged
+scanner-scope fingerprint covering project config, ignore files, target-file
+existence, and the authorized runtime target. If that scope changes, the
+result is `VERIFICATION_INCOMPLETE`, not `VERIFIED`.
+
 If a scanner is skipped, fails, or the target is unavailable, the finding remains in its current state and the lifecycle history records that verification was deferred.
 
 v0.6 targeted verification runs only the relevant scanner family. Use
