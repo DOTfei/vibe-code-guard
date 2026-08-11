@@ -23,3 +23,25 @@ When real scanners are used, report their durations separately. A slow or
 unavailable vulnerability database, registry, rule source, or template source
 must be reported as an external degraded state rather than hidden in this
 baseline.
+
+## v0.7.1 real-scanner observations
+
+The following measurements came from disposable local fixtures on the same
+macOS Apple Silicon development path. They are observations, not promises:
+
+| Operation | Recorded duration |
+| --- | ---: |
+| Gitleaks finding audit | 14 ms |
+| TruffleHog finding audit | 430 ms |
+| Semgrep local-rule audit | 1,114 ms |
+| Trivy dependency audit | 64 ms |
+| Checkov Docker audit | 1,206 ms |
+| Trivy config audit | 333 ms |
+| OSV-Scanner blocked query | 20,885 ms |
+| Gitleaks targeted verify | 10 ms |
+| Checkov targeted verify | 1,128 ms |
+| Trivy targeted verify | 321 ms |
+
+The OSV duration reflects external/environmental unavailability and must not be
+hidden inside a green performance claim. Dashboard startup and active ZAP/Nuclei
+scans are not included in this real-scanner table.

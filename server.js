@@ -468,6 +468,31 @@ function parserFor(tool) {
   });
 }
 
+function gitleaksArgs(projectPath, reportPath) {
+  const args = ['detect', '--source', projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', reportPath];
+  const configured = String(process.env.VCG_GITLEAKS_CONFIG || '').trim();
+  if (configured && !configured.includes('\0') && !/^https?:\/\//i.test(configured)) {
+    const resolved = path.resolve(configured);
+    try {
+      const stat = fs.statSync(resolved);
+      if (stat.isFile() && stat.size <= 1024 * 1024) args.splice(1, 0, '--config', resolved);
+    } catch { /* fall back to Gitleaks' normal configuration discovery */ }
+  }
+  return args;
+}
+
+function semgrepArgs(projectPath) {
+  const configured = String(process.env.VCG_SEMGREP_CONFIG || '').trim();
+  if (configured && !configured.includes('\0') && !/^https?:\/\//i.test(configured)) {
+    const resolved = path.resolve(configured);
+    try {
+      const stat = fs.statSync(resolved);
+      if (stat.isFile() && stat.size <= 1024 * 1024) return ['scan', '--config', resolved, projectPath, '--json'];
+    } catch { /* fall back to the normal upstream rule source */ }
+  }
+  return ['scan', '--config=p/security-audit', projectPath, '--json'];
+}
+
 function updateToolVersion(tool) {
   const commands = {
     gitleaks: ['version'],
@@ -611,14 +636,16 @@ async function executeScanner(run, { tool, stage, args, outputName, parser, repo
   });
 }
 
-function targetedScannerSpec(tool, run) {
+function targetedScannerSpec(tool, run, finding = null) {
   const report = (name) => path.join(run.dir, name);
+  const category = String(finding?.category || '').toUpperCase();
+  const trivyScanner = ['CONFIGURATION', 'INFRASTRUCTURE', 'MISCONFIGURATION'].includes(category) ? 'config' : 'vuln';
   const specs = {
-    gitleaks: { stage: 'rescan', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', report('gitleaks-report.json')], outputName: 'gitleaks-output.txt', reportPath: report('gitleaks-report.json') },
+    gitleaks: { stage: 'rescan', args: gitleaksArgs(run.projectPath, report('gitleaks-report.json')), outputName: 'gitleaks-output.txt', reportPath: report('gitleaks-report.json') },
     trufflehog: { stage: 'rescan', args: ['filesystem', run.projectPath, '--no-verification', '--no-update', '--no-color', '--json'], outputName: 'trufflehog-output.jsonl' },
-    semgrep: { stage: 'rescan', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json' },
+    semgrep: { stage: 'rescan', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json' },
     'osv-scanner': { stage: 'rescan', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json' },
-    trivy: { stage: 'rescan', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json' },
+    trivy: { stage: 'rescan', args: ['fs', '--scanners', trivyScanner, '--skip-db-update', '--format', 'json', run.projectPath], outputName: 'trivy-output.json' },
     checkov: { stage: 'rescan', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json' },
     nuclei: { stage: 'web', args: ['-u', run.webTarget, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl' },
     zap: { stage: 'web', args: ['-cmd', '-quickurl', run.webTarget, '-quickout', report('zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', reportPath: report('zap-report.json') },
@@ -691,7 +718,7 @@ async function runTargetedVerification(run) {
       run.tools[toolId].decisionReason = 'The authorized runtime target was not reachable before active verification.';
       continue;
     }
-    const spec = targetedScannerSpec(toolId, run);
+    const spec = targetedScannerSpec(toolId, run, located.finding);
     if (!spec) {
       run.tools[toolId].status = 'SKIPPED';
       run.tools[toolId].decision = 'SKIP';
@@ -1032,18 +1059,18 @@ async function runPlannedAudit(run) {
   };
 
   await executeStage('secrets', [
-    { tool: 'gitleaks', args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')], outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json') },
+    { tool: 'gitleaks', args: gitleaksArgs(run.projectPath, path.join(run.dir, 'gitleaks-report.json')), outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json') },
     { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: null },
   ]);
   await executeStage('static', [
-    { tool: 'semgrep', args: ['scan', '--config=p/security-audit', run.projectPath, '--json'], outputName: 'semgrep-output.json', parser: null },
+    { tool: 'semgrep', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json', parser: null },
   ]);
 
   const categories = new Set(run.orchestration.categories);
   if (categories.has('DEPENDENCY_CHANGE')) {
     await executeStage('dependencies', [
       { tool: 'osv-scanner', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json', parser: null },
-      { tool: 'trivy', args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath], outputName: 'trivy-output.json', parser: null },
+      { tool: 'trivy', args: ['fs', '--scanners', 'vuln', '--skip-db-update', '--format', 'json', run.projectPath], outputName: 'trivy-output.json', parser: null },
     ]);
   } else {
     skipStage(run, 'dependencies', plannedStageNote(run, ['osv-scanner', 'trivy']));
@@ -1052,7 +1079,7 @@ async function runPlannedAudit(run) {
   if (categories.has('IAC_CHANGE') || categories.has('CONTAINER_CHANGE')) {
     await executeStage('infrastructure', [
       { tool: 'checkov', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json', parser: null },
-      { tool: 'trivy', args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath], outputName: 'trivy-config-output.json', parser: null },
+      { tool: 'trivy', args: ['fs', '--scanners', 'config', '--skip-db-update', '--format', 'json', run.projectPath], outputName: 'trivy-config-output.json', parser: null },
     ]);
   } else {
     skipStage(run, 'infrastructure', plannedStageNote(run, ['checkov', 'trivy']));
@@ -1102,7 +1129,7 @@ async function runAudit(run) {
     stageStart(run, 'secrets');
     await executeScanner(run, {
       tool: 'gitleaks', stage: 'secrets',
-      args: ['detect', '--source', run.projectPath, '--no-git', '--redact', '--report-format', 'json', '--report-path', path.join(run.dir, 'gitleaks-report.json')],
+      args: gitleaksArgs(run.projectPath, path.join(run.dir, 'gitleaks-report.json')),
       outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json'),
     });
     await executeScanner(run, {
@@ -1115,7 +1142,7 @@ async function runAudit(run) {
     stageStart(run, 'static');
     await executeScanner(run, {
       tool: 'semgrep', stage: 'static',
-      args: ['scan', '--config=p/security-audit', run.projectPath, '--json'],
+      args: semgrepArgs(run.projectPath),
       outputName: 'semgrep-output.json', parser: null,
     });
     stageFinish(run, 'static', run.tools.semgrep.status === 'ERROR' || run.tools.semgrep.status === 'FAIL' ? 'FAIL' : 'PASS');
@@ -1128,7 +1155,7 @@ async function runAudit(run) {
     });
     await executeScanner(run, {
       tool: 'trivy', stage: 'dependencies',
-      args: ['fs', '--scanners', 'vuln', '--format', 'json', run.projectPath],
+      args: ['fs', '--scanners', 'vuln', '--skip-db-update', '--format', 'json', run.projectPath],
       outputName: 'trivy-output.json', parser: null,
     });
     stageFinish(run, 'dependencies', [run.tools['osv-scanner'], run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
@@ -1142,7 +1169,7 @@ async function runAudit(run) {
       });
       await executeScanner(run, {
         tool: 'trivy', stage: 'infrastructure',
-        args: ['fs', '--scanners', 'config', '--format', 'json', run.projectPath],
+        args: ['fs', '--scanners', 'config', '--skip-db-update', '--format', 'json', run.projectPath],
         outputName: 'trivy-config-output.json', parser: null,
       });
       stageFinish(run, 'infrastructure', [run.tools.checkov, run.tools.trivy].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
