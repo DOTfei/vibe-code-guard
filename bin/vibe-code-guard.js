@@ -88,7 +88,7 @@ async function commandDoctor(options) {
 }
 
 async function commandInstall(options) {
-  const plan = await installPlan();
+  const plan = await installPlan({ resolveRelease: async (tool) => require('../core/agent/tool-lifecycle').discoverLatestStable(tool) });
   const local = installLocalEntrypoints({ dryRun: true });
   const data = { status: options.dryRun || !options.yes ? 'PLAN_ONLY' : 'INSTALLING', plan, localEntrypoints: local, upstreamTools: 'independently installed; never bundled by this repository' };
   if (!options.yes && !options.dryRun) data.nextAction = 'Review this plan, then rerun with --yes to apply only these planned actions.';

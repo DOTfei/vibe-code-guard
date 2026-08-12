@@ -250,12 +250,14 @@ async function commandExists(command) {
   return Boolean(await which(command));
 }
 
-async function installPlan({ includeTools = true, inspect = inspectTool, commandExistsFn = commandExists } = {}) {
+async function installPlan({ includeTools = true, inspect = inspectTool, commandExistsFn = commandExists, resolveRelease = null } = {}) {
   const manifest = loadManifest();
   const inspected = {};
   for (const tool of manifest.tools) inspected[tool.id] = await inspect(tool);
   const actions = [];
   const notes = [];
+  const missingTools = [];
+  const installPlan = [];
   const brew = await commandExistsFn('brew');
   const pipx = await commandExistsFn('pipx');
   const python = await commandExistsFn('python3');
@@ -265,11 +267,19 @@ async function installPlan({ includeTools = true, inspect = inspectTool, command
         if (inspected[tool.id].status !== 'READY') notes.push(`${tool.displayName}: ${inspected[tool.id].status}; no automatic reinstall or downgrade will be attempted.`);
         continue;
       }
+      const release = resolveRelease ? await resolveRelease(tool) : null;
+      const minimum = minimumVersion(tool.supportedVersionRange);
+      const releaseVersion = release?.latestStableVersion ? parseVersion(release.latestStableVersion) : null;
+      const compatibleRelease = !resolveRelease || Boolean(release?.latestStableVersion && release?.state === 'CHECKED' && releaseVersion && (!minimum || compareVersions(releaseVersion, minimum) >= 0));
+      const planned = { tool: tool.id, displayName: tool.displayName, sourceType: 'OFFICIAL_UPSTREAM', source: tool.install?.official || tool.upstream?.officialRepository || null, installMethod: tool.install?.type || 'manual', versionPolicy: 'LATEST_STABLE_COMPATIBLE', compatibility: tool.supportedVersionRange || null, stableOnly: tool.version?.stableOnly !== false, latestStableVersion: release?.latestStableVersion || null, releaseUrl: release?.releaseUrl || null, releaseState: release?.state || 'NOT_CHECKED', validation: tool.selfTest || null, requiresAuthorization: true, state: release?.latestStableVersion && release?.state === 'CHECKED' ? 'INSTALLABLE' : 'MANUAL_REVIEW_REQUIRED' };
+      planned.state = compatibleRelease ? 'INSTALLABLE' : release?.state === 'CHECKED' ? 'INCOMPATIBLE_OR_UNVALIDATED' : 'MANUAL_REVIEW_REQUIRED';
+      missingTools.push(tool.id);
+      installPlan.push(planned);
       const spec = tool.install || {};
-      if ((spec.type === 'brew' || spec.type === 'brew-cask') && brew) {
-        actions.push({ id: tool.id, command: 'brew', args: spec.type === 'brew-cask' ? ['install', '--cask', spec.cask] : ['install', spec.formula], source: spec.official, reason: 'Install missing tool from the official Homebrew channel.' });
-      } else if (spec.type === 'pipx' && pipx) {
-        actions.push({ id: tool.id, command: 'pipx', args: ['install', spec.package], source: spec.official, reason: 'Install missing Python tool in an isolated pipx environment.' });
+      if (planned.state === 'INSTALLABLE' && (spec.type === 'brew' || spec.type === 'brew-cask') && brew) {
+        actions.push({ id: tool.id, command: 'brew', args: spec.type === 'brew-cask' ? ['install', '--cask', spec.cask] : ['install', spec.formula], source: spec.official, sourceType: 'OFFICIAL_UPSTREAM', versionPolicy: 'LATEST_STABLE_COMPATIBLE', latestStableVersion: planned.latestStableVersion, requiresAuthorization: true, reason: 'Install through the fixed official Homebrew channel, then validate the actual installed version.' });
+      } else if (planned.state === 'INSTALLABLE' && spec.type === 'pipx' && pipx) {
+        actions.push({ id: tool.id, command: 'pipx', args: ['install', spec.package], source: spec.official, sourceType: 'OFFICIAL_UPSTREAM', versionPolicy: 'LATEST_STABLE_COMPATIBLE', latestStableVersion: planned.latestStableVersion, requiresAuthorization: true, reason: 'Install through the fixed official pipx channel, then validate the actual installed version.' });
       } else if (spec.type === 'pipx' && python) {
         notes.push(`${tool.displayName}: pipx is unavailable; no automatic pip fallback is planned. Install pipx and rerun.`);
       } else {
@@ -277,7 +287,7 @@ async function installPlan({ includeTools = true, inspect = inspectTool, command
       }
     }
   }
-  return { platform: process.platform, architecture: process.arch, brewAvailable: brew, pipxAvailable: pipx, python3Available: python, inspected, actions, notes };
+  return { platform: process.platform, architecture: process.arch, brewAvailable: brew, pipxAvailable: pipx, python3Available: python, inspected, missingTools, installPlan, actions, notes, authorizationRequired: actions.length > 0 };
 }
 
 function shellQuote(value) {

@@ -32,6 +32,13 @@ The dry run detects OS, architecture, existing binaries, Homebrew/pipx
 availability, and conflicts. It prints the exact fixed installer actions. It
 does not modify the machine.
 
+For missing upstream tools, the JSON plan includes `missingTools`,
+`installPlan`, `sourceType: OFFICIAL_UPSTREAM`,
+`versionPolicy: LATEST_STABLE_COMPATIBLE`, compatibility metadata, and
+`requiresAuthorization: true`. VCG checks the fixed official release source;
+it does not trust search results or generate an action for an unverified or
+incompatible stable release.
+
 After reviewing the plan:
 
 ```bash

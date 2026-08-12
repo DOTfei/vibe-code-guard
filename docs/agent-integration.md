@@ -67,6 +67,14 @@ user, run the supplied Vibe Code Guard command explicitly, then run doctor
 again before auditing. Do not invent a database or use scanner-specific
 random installation instructions.
 
+When a third-party binary is missing, the install plan is the authority. It
+uses the fixed manifest identity and supported installation method, reports
+`sourceType: OFFICIAL_UPSTREAM`, applies the `LATEST_STABLE_COMPATIBLE` policy,
+and sets `requiresAuthorization: true`. If the official stable release cannot
+be checked or is outside the compatibility policy, no install action is
+generated. Agents must explain that plan and obtain authorization; they must
+not search GitHub or invent a package source.
+
 If the launcher is not installed yet, use the local equivalent:
 
 ```bash

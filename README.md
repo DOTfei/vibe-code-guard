@@ -43,6 +43,11 @@ action-required recovery command, ask before refreshing external scanner
 content, re-run doctor, and only then continue the audit. It never fakes a
 database or silently updates scanners.
 
+If an upstream scanner is missing, Vibe Code Guard supplies the official-source
+install plan and compatibility policy. Your coding agent explains the planned
+machine change and asks for authorization. It does not search GitHub, guess a
+repository, or invent an installation command.
+
 If the audit finds a release-blocking issue, the next user prompt can be:
 
 ```text

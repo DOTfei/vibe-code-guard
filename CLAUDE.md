@@ -8,6 +8,9 @@ Installation can finish with `INSTALLED_WITH_ACTION_REQUIRED`: inspect doctor
 JSON recovery actions, explain explicit content/runtime refreshes, run only the
 supplied Vibe Code Guard command after authorization, then re-run doctor before
 auditing.
+Missing scanners must be handled through the VCG-provided install plan. Use
+its fixed official source, supported method, compatibility policy, and
+validation metadata; never search GitHub or invent an installation command.
 
 When the user says “Use Vibe Code Guard to audit this project”, run the
 agent-readable workflow:
