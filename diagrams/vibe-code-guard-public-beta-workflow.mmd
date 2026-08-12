@@ -1,0 +1,27 @@
+graph TD
+  A["You + Codex / Claude Code"] --> B["Install + Doctor"]
+  B --> C["Discover project + change"]
+  C --> D{"Choose profile"}
+  D -->|quick / auto / full / release| E["Vibe Code Guard workflow"]
+  E --> F["Select relevant checks"]
+  F --> G["Independent upstream scanners<br/>Gitleaks | Semgrep | Trivy | OSV<br/>Checkov | TruffleHog | ZAP | Nuclei"]
+  G --> H["Normalize + correlate evidence"]
+  H --> I["Unified Findings + lifecycle"]
+  I --> J["Local Dashboard + CLI / JSON"]
+  I --> K["Authorized fix"]
+  K --> L["Targeted rescan"]
+  L --> M{"Coverage complete?"}
+  M -->|verified| N["Conservative release gate"]
+  M -->|still detected / incomplete| I
+  E -. "runtime checks require authorized localhost / test target" .-> G
+
+  classDef agent fill:#123047,stroke:#8bd3ff,color:#f7fbff,stroke-width:2px;
+  classDef workflow fill:#e8f2f8,stroke:#28739c,color:#123047,stroke-width:2px;
+  classDef scanners fill:#173d33,stroke:#72e0b0,color:#effff8,stroke-width:2px;
+  classDef result fill:#fff4d6,stroke:#d4972b,color:#39280b,stroke-width:2px;
+  classDef decision fill:#5b3a0e,stroke:#f2b84b,color:#fff8e8,stroke-width:2px;
+  class A,B agent;
+  class C,E workflow;
+  class F scanners;
+  class G,H,I,J,K,M result;
+  class D,L decision;

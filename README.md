@@ -55,6 +55,16 @@ Dashboard
 Humans use the Dashboard. Coding agents use the CLI and JSON output. Both read
 the same findings, lifecycle, verification, scanner status, and release gate.
 
+![Vibe Code Guard Public Beta workflow: coding agent, Vibe Code Guard orchestration, upstream scanners, findings, targeted verification, release gate, and Dashboard](diagrams/vibe-code-guard-public-beta-workflow.svg)
+
+_Workflow diagram: the upstream scanners provide detection engines; Vibe Code
+Guard provides the local orchestration, evidence model, lifecycle, and release
+workflow._
+
+Editable sources: [Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
+[Excalidraw](diagrams/vibe-code-guard-public-beta-workflow.excalidraw) ·
+[PNG](diagrams/vibe-code-guard-public-beta-workflow.png)
+
 ## Public Beta limitations
 
 Vibe Code Guard does not guarantee that software is secure or that every issue
@@ -489,6 +499,11 @@ engines, plus the workflow outputs users see.
   [draw.io source](diagrams/vibe-code-guard-flow.drawio) ·
   [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
   [Excalidraw](diagrams/vibe-code-guard-flow.excalidraw)
+
+- **Public Beta workflow:** [SVG](diagrams/vibe-code-guard-public-beta-workflow.svg) ·
+  [Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-public-beta-workflow.excalidraw) ·
+  [PNG](diagrams/vibe-code-guard-public-beta-workflow.png)
 
 The diagrams describe this repository's own architecture. The draw.io source
 can be refined with [Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io);
