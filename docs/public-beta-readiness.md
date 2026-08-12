@@ -44,16 +44,22 @@ global scanner installation.
 These checks were run read-only against the committed fixtures or a disposable
 localhost target. They are deliberately separate from the mock E2E result.
 
+The real-scanner taxonomy uses exactly four states: `REAL_VALIDATED` for a
+completed tested workflow, `REAL_PARTIAL` for real execution with an untested
+dimension, `BLOCKED_BY_ENVIRONMENT` for an unavailable external dependency, and
+`NOT_TESTED` for a validation dimension not performed. `NOT_TESTED` is not a
+failure result.
+
 | Scanner | Status | Fixture/target | Evidence and limitation |
 | --- | --- | --- | --- |
 | Gitleaks | REAL_VALIDATED | Disposable Node API + local synthetic rule | Real 8.30.1 finding was normalized, fixed, rescanned, and returned `VERIFIED`. |
 | TruffleHog | REAL_PARTIAL | Disposable Node API | Real JSONL scan and secret-family coverage completed safely with no synthetic match; no network verification was enabled. |
-| Semgrep | REAL_VALIDATED | Node API + repository-local rule | Real 1.172.0 produced a structured local-rule finding. Temporary HOME/CA settings were required; no remote rule registry was needed. |
-| Trivy | REAL_VALIDATED with freshness limitation | Node API package-lock + Dockerfile | Real 0.73.0 returned dependency and config findings with `--skip-db-update`; the local DB was usable but expired, so freshness remains DEGRADED. |
+| Semgrep | REAL_PARTIAL | Node API + repository-local rule | Real 1.172.0 produced a structured local-rule finding. A real Semgrep finding → fix → targeted verify chain was `NOT_TESTED`; temporary HOME/CA settings were required. |
+| Trivy | REAL_VALIDATED | Dockerfile config path | Real 0.73.0 returned config findings with `--skip-db-update` and completed the Checkov + Trivy config verification chain. Dependency finding → fix → targeted verify was `NOT_TESTED`; the local DB was usable but expired. |
 | OSV-Scanner | BLOCKED_BY_ENVIRONMENT | Node API package-lock | Real scanner started but external `api.osv.dev` access was unavailable; no false clean result was reported. |
 | Checkov | REAL_VALIDATED | Disposable Dockerfile | Real 3.3.0 returned `CKV_DOCKER_2` / `CKV_DOCKER_3`; after remediation, Checkov + Trivy targeted verification returned `VERIFIED`. |
-| Nuclei | REAL_PARTIAL | Disposable `127.0.0.1` server | Real localhost invocation completed with no finding. No template update or deterministic template detection claim was made. |
-| OWASP ZAP | REAL_PARTIAL | Temporary HOME version smoke | Real ZAP 2.17.0 launcher/version path was exercised; no active target scan or add-on update was performed. |
+| Nuclei | REAL_PARTIAL | Disposable `127.0.0.1` server | Real localhost invocation completed with no finding; active Nuclei finding detection is explicitly `NOT_TESTED`. No template update was performed. |
+| OWASP ZAP | REAL_PARTIAL | Temporary HOME version smoke | Real ZAP 2.17.0 launcher/version path was exercised; active ZAP finding detection is explicitly `NOT_TESTED`. No add-on update was performed. |
 
 `PASS` in this table means the named smoke check completed. It does not mean
 the scanner is current, that every project path is covered, or that the
@@ -73,6 +79,9 @@ The real validator also demonstrated `STILL_DETECTED` with exit 1,
 The local Dashboard persisted the same `VERIFIED` state and scanner versions as
 the CLI result. See [`docs/real-scanner-validation.md`](real-scanner-validation.md)
 for commands, versions, durations, and limitations.
+
+The explicit `NOT_TESTED` dimensions remain limited to the report's stated
+boundaries; they are not converted into failures or implied passes.
 
 ## Validated fixture matrix
 

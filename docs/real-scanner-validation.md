@@ -28,21 +28,45 @@ green result.
 
 ## Scanner matrix
 
-`REAL_VALIDATED` means the installed scanner executed against a safe fixture,
-produced structured output, and its relevant behavior was validated. It does
-not mean the scanner covers every project or that its external intelligence is
-current.
+## Validation taxonomy
+
+Use these four states exactly:
+
+- `REAL_VALIDATED`: the tested scanner workflow executed against a safe local
+  fixture, produced structured output, and the claimed behavior was validated.
+- `REAL_PARTIAL`: real local execution was validated, but one or more important
+  detection, remediation, freshness, or targeted-verification dimensions were
+  not completed.
+- `BLOCKED_BY_ENVIRONMENT`: the workflow could not complete because an external
+  environment dependency, such as network access, was unavailable.
+- `NOT_TESTED`: a specific validation dimension was not performed in this
+  milestone. This is not a failure result and must not be treated as one.
+
+These states describe the tested evidence only. They do not mean a scanner
+covers every project or that its external intelligence is current.
 
 | Scanner | State | Version / binary / provenance | Real fixture and command | Result | Limitation |
 | --- | --- | --- | --- | --- | --- |
 | Gitleaks | `REAL_VALIDATED` | 8.30.1; `/opt/homebrew/bin/gitleaks`; Homebrew-installed upstream project | Disposable Node API fixture with a repository-owned synthetic token and a local validation rule; `gitleaks detect --source <fixture> --config <fixture>/.gitleaks.toml --no-git --redact --report-format json --report-path <report>` | Exit 1 with one structured finding; Vibe Code Guard normalized it, tracked it, and completed a real fix → targeted verify → `VERIFIED` chain | The token was synthetic and never externally verified |
 | TruffleHog | `REAL_PARTIAL` | 3.96.0; `/opt/homebrew/bin/trufflehog`; Homebrew-installed upstream project | `trufflehog filesystem <fixture> --no-verification --no-update --no-color --json` | Real local JSON scan completed and participated in the secret-family verification; no finding was emitted for the repository-owned synthetic token | This fixture did not prove a TruffleHog detection rule match; no network verification was enabled |
-| Semgrep | `REAL_VALIDATED` | 1.172.0; `/opt/homebrew/bin/semgrep`; Homebrew-installed upstream project | Node API fixture plus repository-local rule `test/real-scanner/semgrep/vcg-real-static.yml`; `semgrep scan --metrics=off --config <local-rule> <fixture> --json` with temporary HOME and CA settings | Exit 0 with one structured result; rule ID, severity, location, version, and finding were normalized by Vibe Code Guard | Normal HOME/log permissions and remote registry access are environment-sensitive; the core validation used a local rule and did not depend on `semgrep.dev` |
-| Trivy | `REAL_VALIDATED` with freshness limitation | 0.73.0; `/opt/homebrew/bin/trivy`; Homebrew-installed upstream project | Dependency and Dockerfile fixtures; `trivy fs --scanners vuln --skip-db-update --format json --quiet <fixture>` and `trivy fs --scanners config --skip-db-update --format json --quiet <fixture>` | Returned real lodash CVEs for the dependency fixture and real `DS-0002` / `DS-0026` findings for the Docker fixture; config findings completed a real Checkov + Trivy `VERIFIED` chain | The local vulnerability DB was expired. This is a real result from a usable stale DB, not a freshness PASS |
+| Semgrep | `REAL_PARTIAL` | 1.172.0; `/opt/homebrew/bin/semgrep`; Homebrew-installed upstream project | Node API fixture plus repository-local rule `test/real-scanner/semgrep/vcg-real-static.yml`; `semgrep scan --metrics=off --config <local-rule> <fixture> --json` with temporary HOME and CA settings | Exit 0 with one structured result; rule ID, severity, location, version, and finding were normalized by Vibe Code Guard | Normal HOME/log permissions and remote registry access are environment-sensitive; a real Semgrep finding → fix → targeted verify chain was not tested in this milestone |
+| Trivy | `REAL_VALIDATED` | 0.73.0; `/opt/homebrew/bin/trivy`; Homebrew-installed upstream project | Dockerfile fixture; `trivy fs --scanners config --skip-db-update --format json --quiet <fixture>` | Returned real `DS-0002` / `DS-0026` findings; the config path completed a real Checkov + Trivy `VERIFIED` chain | Dependency findings were observed separately, but a Trivy dependency finding → fix → targeted verify chain was not tested. The local vulnerability DB was expired and remains a freshness limitation |
 | OSV-Scanner | `BLOCKED_BY_ENVIRONMENT` | 2.5.0; `/opt/homebrew/bin/osv-scanner`; Homebrew-installed upstream project | `osv-scanner scan source --recursive --format json <fixture>` | The scanner started, but external OSV query access was unavailable; Vibe Code Guard preserved the incomplete dependency assessment | No database or network refresh was attempted; this remains a blocker for a complete OSV-backed dependency assessment |
 | Checkov | `REAL_VALIDATED` | 3.3.0; `/opt/homebrew/bin/checkov`; pipx/Homebrew environment, upstream project | Dockerfile fixture; `checkov -d <fixture> --output json --quiet` | Exit 1 with structured `CKV_DOCKER_2` and `CKV_DOCKER_3`; after adding a non-root `USER` and local `HEALTHCHECK`, targeted verification with Checkov + Trivy returned `PASSED` / `VERIFIED` | External guideline mapping lookup was unavailable, but local checks and JSON parsing worked |
-| OWASP ZAP | `REAL_PARTIAL` | 2.17.0; `/Applications/ZAP.app/Contents/Java/zap.sh`; official application installation | Temporary HOME version/launcher smoke; no active target was supplied | Real launcher health/version path was exercised without scanning a target | No active ZAP finding or targeted verification was claimed; no add-ons were refreshed |
-| Nuclei | `REAL_PARTIAL` | 3.11.1; `/opt/homebrew/bin/nuclei`; Homebrew-installed upstream project | Disposable loopback server with `nuclei -u http://127.0.0.1:<port> -tags tech -jsonl -silent -no-interactsh -timeout 3 -retries 0` | Real localhost invocation completed safely with structured empty output | No deterministic template finding was claimed; official templates were not refreshed |
+| OWASP ZAP | `REAL_PARTIAL` | 2.17.0; `/Applications/ZAP.app/Contents/Java/zap.sh`; official application installation | Temporary HOME version/launcher smoke; no active target was supplied | Real launcher health/version path was exercised without scanning a target | Active ZAP finding detection is `NOT_TESTED`; no add-ons were refreshed |
+| Nuclei | `REAL_PARTIAL` | 3.11.1; `/opt/homebrew/bin/nuclei`; Homebrew-installed upstream project | Disposable loopback server with `nuclei -u http://127.0.0.1:<port> -tags tech -jsonl -silent -no-interactsh -timeout 3 -retries 0` | Real localhost invocation completed safely with structured empty output | Active Nuclei finding detection is `NOT_TESTED`; official templates were not refreshed |
+
+## Validation dimensions not tested
+
+These are explicit `NOT_TESTED` dimensions, not failures:
+
+| Scanner or workflow | State | Boundary |
+| --- | --- | --- |
+| Semgrep real finding → fix → targeted verify chain | `NOT_TESTED` | Only local rule execution and normalization were validated |
+| TruffleHog deterministic real finding match | `NOT_TESTED` | Safe local JSONL execution completed, but the synthetic token was not detected |
+| Trivy dependency finding → fix → targeted verify chain | `NOT_TESTED` | Dependency findings were observed with a usable but stale DB; no dependency remediation chain was claimed |
+| OWASP ZAP active real finding detection | `NOT_TESTED` | Only launcher/version smoke was performed |
+| Nuclei active real finding detection | `NOT_TESTED` | Only safe localhost invocation with empty output was performed |
 
 ## Real fix and verification chains
 
