@@ -1,3 +1,6 @@
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
@@ -109,6 +112,20 @@ test('adapts every supported scanner output into Unified Findings', () => {
   }
   assert.deepEqual(Object.keys(ADAPTERS).sort(), ['checkov', 'gitleaks', 'nuclei', 'osv-scanner', 'semgrep', 'trivy', 'trufflehog', 'zap']);
   assert.equal(CATEGORIES.includes('SECRET_EXPOSURE'), true);
+});
+
+test('normalizes Checkov project-root paths so targeted scope verification remains usable', () => {
+  const projectPath = fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-checkov-'));
+  fs.writeFileSync(path.join(projectPath, 'Dockerfile'), 'FROM node:20-alpine\n', 'utf8');
+  try {
+    const findings = adaptScannerOutput('checkov', JSON.stringify({ results: { failed_checks: [{ check_id: 'CKV_DOCKER_SYNTHETIC', check_name: 'Synthetic container check', check_type: 'dockerfile', file_path: '/Dockerfile', file_line_range: [1] }] } }), { ...context, projectPath });
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].location.file, 'dockerfile');
+    const outside = adaptScannerOutput('checkov', JSON.stringify({ results: { failed_checks: [{ check_id: 'CKV_DOCKER_OUTSIDE', file_path: '/etc/passwd', file_line_range: [1] }] } }), { ...context, projectPath });
+    assert.equal(outside[0].location.file, '/etc/passwd');
+  } finally {
+    fs.rmSync(projectPath, { recursive: true, force: true });
+  }
 });
 
 test('malformed, empty, and unknown scanner output are safe', () => {

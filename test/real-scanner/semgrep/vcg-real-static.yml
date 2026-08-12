@@ -1,0 +1,8 @@
+rules:
+  - id: vcg.real.synthetic-auth-header
+    languages: [javascript]
+    message: Synthetic authorization header access requires an explicit boundary.
+    severity: ERROR
+    metadata:
+      category: ACCESS_CONTROL
+    pattern: $REQUEST.headers.authorization

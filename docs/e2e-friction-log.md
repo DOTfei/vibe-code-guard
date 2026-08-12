@@ -21,6 +21,18 @@ environment behavior, not vulnerabilities in a user's application.
 | P2 | Global tool freshness | The real workstation may report Semgrep, ZAP content, Trivy DB, Nuclei templates, or OSV status as degraded. | v0.7 never upgrades or reinstalls scanners to make tests green. It preserves and reports the external state. |
 | P2 | First install | The installer does not edit shell startup files, so a launcher may not be on `PATH` immediately. | Agents must use the returned absolute `localEntrypoints.pathHint` or ask the user to add it to `PATH` explicitly. |
 
+## v0.7.1 real-scanner validation
+
+| Severity | Area | Observation | Handling |
+| --- | --- | --- | --- |
+| P2 | Semgrep local execution | The installed Semgrep process may try to write its normal log under a non-writable HOME, and remote registry/CA access is not reliable in a restricted environment. | The real core validation uses a repository-local pinned synthetic rule, a temporary HOME, and explicit CA/metrics settings. The limitation is reported rather than treated as a clean remote-rule result. |
+| P2 | OSV-Scanner | `api.osv.dev` was unavailable; a real dependency run could not complete its external query. | Classify OSV as `BLOCKED_BY_ENVIRONMENT` and keep the dependency release gate conservative. No refresh or retry loop is hidden. |
+| P2 | Trivy database | The local DB is readable and schema-compatible but its freshness window is expired. | Run deterministic local checks with `--skip-db-update`; report DB freshness separately as DEGRADED and never equate it with a current database. |
+| P2 | Checkov path output | Checkov emitted a project Dockerfile as `/Dockerfile`, which originally prevented a stable scope fingerprint. | The adapter now maps a leading-slash project-relative path only after proving the file is a regular file inside the authorized project root; outside paths remain outside. |
+| P3 | Checkov guideline lookup | External guideline mapping lookup failed while local checks still returned structured findings. | Preserve local findings and report the external mapping limitation separately. |
+| P3 | TruffleHog synthetic coverage | The safe repository-owned token used for the Gitleaks chain was not detected by TruffleHog. | Record real execution and parsing as partial coverage; never claim TruffleHog detection was proven by this fixture. |
+| P3 | ZAP/Nuclei real detection | A safe active runtime finding was not required or completed in v0.7.1. | Keep active scanning scoped to localhost/authorized targets and classify launcher/loopback smoke as partial only. |
+
 ## Known limitations
 
 - **P2:** The committed fixtures are safe synthetic projects. They are not a claim of
