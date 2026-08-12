@@ -77,9 +77,15 @@ test('coverage and toolchain states remain visible as degraded instead of green'
 test('agent prompt is actionable but excludes scanner evidence and secrets', () => {
   const prompt = viewModel.buildAgentPrompt(run, [finding('VCG-1', 'HIGH', 'OPEN', 'Missing authorization check')]);
   assert.match(prompt, /vibe-code-guard audit/);
+  assert.match(prompt, /current release-blocking findings/i);
+  assert.match(prompt, /authorize code changes/i);
+  assert.match(prompt, /targeted verification/i);
+  assert.match(prompt, /do not scrape Dashboard HTML/i);
   assert.match(prompt, /VCG-1/);
   assert.doesNotMatch(prompt, /REDACTED synthetic evidence/);
   assert.doesNotMatch(prompt, /sk_live_|AKIA[0-9A-Z]+/);
+  const nonBlocking = viewModel.buildAgentPrompt({ status: 'PASS', releaseGate: { label: 'READY TO DEPLOY', reason: 'No known Critical/High findings.' } }, [finding('VCG-LOW', 'LOW', 'OPEN', 'Low issue')]);
+  assert.doesNotMatch(nonBlocking, /current release-blocking findings/);
 });
 
 test('Dashboard source-of-truth and historical compatibility surfaces are documented', () => {

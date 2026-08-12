@@ -119,7 +119,7 @@
     const selected = priorityFindings(findings, run, 5);
     const lines = [
       'Use Vibe Code Guard to review this project using the canonical local workflow.',
-      'Read the structured CLI result and Dashboard state; do not invent scanner results or claim 100% security.',
+      'Use CLI/JSON as the machine interface; the Dashboard is for human context. Do not scrape Dashboard HTML, invent scanner results, or claim 100% security.',
       '',
       `Release decision: ${decision.label}`,
       `Gate reason: ${promptValue(decision.reason)}`,
@@ -127,9 +127,12 @@
       'Dashboard: vibe-code-guard dashboard --json',
     ];
     if (selected.length) {
-      lines.push('', 'Prioritize these correlated findings:');
+      const hasBlocking = selected.some((finding) => finding.releaseBlocking);
+      lines.push('', hasBlocking
+        ? 'Use Vibe Code Guard to fix the current release-blocking findings only after I authorize code changes.'
+        : 'Use Vibe Code Guard to review these current findings; do not treat a clean result as a security guarantee.', 'Prioritize these correlated findings:');
       selected.forEach((finding) => lines.push(`- ${promptValue(finding.id)} · ${promptValue(finding.severity)} · ${promptValue(finding.title)} · ${promptValue(finding.location?.file || finding.location?.endpoint, 'location unavailable')}`));
-      lines.push('', 'If I authorize fixes, make the smallest safe change, then run targeted verification. A fix is not verified until the relevant scanner coverage succeeds.');
+      lines.push('', 'After an authorized fix, run targeted verification. A fix is not verified until the relevant scanner coverage succeeds.');
     } else {
       lines.push('', 'No correlated findings were supplied to this prompt. Report what actually ran, what was skipped, and any degraded toolchain coverage.');
     }

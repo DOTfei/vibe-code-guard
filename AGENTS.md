@@ -117,5 +117,5 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 
 The intended first-run instruction is:
 
-> Install and use Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard,
-> then security audit this project.
+> Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
+> and security audit this project.

@@ -28,8 +28,8 @@ without learning eight scanner command lines.
 Give your coding agent this repository and say:
 
 ```text
-Install and use Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard,
-then security audit this project.
+Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
+and security audit this project.
 ```
 
 The agent should safely plan installation, check the local toolchain, discover
