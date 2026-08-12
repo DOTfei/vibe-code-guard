@@ -2,7 +2,7 @@
 
 **A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
 
-`v0.8.0-beta` · Public Beta packaging / Active Development · macOS Apple Silicon validated
+`v0.8.0-beta` · **Public Beta** · Active Development · macOS Apple Silicon validated
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -19,7 +19,7 @@ usable.**
 
 Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
 
-## The first-use experience
+## Try it with your coding agent
 
 Vibe Code Guard is for people who build with Codex, Claude Code, Gemini CLI,
 Cursor agents, or similar coding agents and want a local security workflow
@@ -32,10 +32,28 @@ Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
 and security audit this project.
 ```
 
-The agent should safely plan installation, check the local toolchain, discover
-the project, select relevant checks, run the audit, read the structured result,
-and show the local Dashboard. The scanners remain independently installed
-upstream tools; Vibe Code Guard supplies the safe workflow around them.
+The intended flow is:
+
+```text
+Install → Doctor → Detect stack → Choose relevant checks → Audit
+        → Correlate findings → Dashboard → Authorized fix → Targeted verify
+```
+
+The agent safely plans installation, checks the local toolchain, discovers the
+project, selects relevant checks, reads structured output, and opens the local
+Dashboard. You do not need to learn eight scanner command lines. The scanners
+remain independently installed upstream tools; Vibe Code Guard supplies the
+safe workflow around them.
+
+<p align="center">
+  <img src="docs/assets/dashboard-overview.png" alt="Vibe Code Guard Public Beta Dashboard showing a local audit overview, release decision, findings, coverage, and scanner status" width="1100" />
+</p>
+
+_Real local Dashboard state from the safe synthetic Public Beta demo. It uses
+mock scanners and synthetic findings; no real credentials or public targets._
+
+See the [Dashboard findings view](docs/assets/dashboard-findings.png) for the
+correlated issue and scanner-evidence view.
 
 The launcher installation and scanner readiness are reported separately. If a
 first-run database or runtime component is missing, the agent will show an
@@ -72,6 +90,23 @@ paths without changing the host toolchain or contacting public targets. See
 [`v0.7 friction log`](docs/e2e-friction-log.md) for the tested boundary and
 known limitations. Maintainers can use the [safe public-beta demo](docs/public-beta-demo.md)
 to review the Dashboard states without public targets or real credentials.
+
+### Quick Start
+
+For a manual fallback, run:
+
+```bash
+./install.sh --dry-run
+./install.sh --yes
+vibe-code-guard doctor --json
+vibe-code-guard audit . --profile auto --json
+vibe-code-guard dashboard --json
+```
+
+The Dashboard binds to `127.0.0.1` only. Public Beta does not claim complete
+real-world coverage: runtime scanning requires an authorized local/test target,
+and external scanner databases, rules, templates, and add-ons may be
+degraded or unavailable. A clean result is not a security guarantee.
 
 ## What this project is
 
