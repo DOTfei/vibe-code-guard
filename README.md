@@ -28,9 +28,7 @@ learn each scanner's command line.
 ![Vibe Code Guard Dashboard overview showing the release decision, important findings, verification state, and security coverage](docs/assets/dashboard-overview.png)
 
 _The overview brings the release decision, important findings, verification
-state, and security coverage together. This is real local Dashboard state from
-the safe synthetic Public Beta demo: mock scanners and synthetic findings, with
-no real credentials or public targets._
+state, and security coverage together._
 
 ## Basic flow
 
@@ -231,6 +229,16 @@ skipped, fails, or coverage is incomplete, the result stays incomplete.
 
 _The Findings view keeps the correlated issue and the independent scanner
 observations visible together._
+
+![Vibe Code Guard Dashboard toolkit health view showing scanner and content readiness](docs/assets/dashboard-toolkit-health.png)
+
+_Toolkit health keeps scanner readiness, freshness, and degraded states visible
+instead of hiding them behind a green result._
+
+![Vibe Code Guard Dashboard history view showing append-only scan history and release results](docs/assets/dashboard-history.png)
+
+_History keeps previous runs available so a fix and its later verification can
+be reviewed as part of the same local record._
 
 The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
 require an account or cloud database, and does not upload source code or scan
