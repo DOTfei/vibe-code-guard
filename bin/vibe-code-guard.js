@@ -30,6 +30,18 @@ const {
 const VERSION = require('../package.json').version;
 const PROFILES = new Set(['auto', 'quick', 'full', 'release']);
 
+function auditReadiness({ health, plan, profile, webTarget }) {
+  const lifecycleTools = health.lifecycle?.tools || {};
+  const planned = plan?.tools || [];
+  const required = new Set(planned.filter((item) => item.decision === 'RUN').map((item) => item.tool));
+  if (!plan) ['gitleaks', 'trufflehog', 'semgrep', 'osv-scanner', 'trivy', ...(profile === 'full' || profile === 'release' ? ['checkov'] : [])].forEach((tool) => required.add(tool));
+  if ((profile === 'full' || profile === 'release') && webTarget) { required.add('zap'); required.add('nuclei'); }
+  else { required.delete('zap'); required.delete('nuclei'); }
+  const blockers = [...required].filter((tool) => ['BROKEN', 'NOT_INSTALLED'].includes(lifecycleTools[tool]?.state)).map((tool) => ({ tool, toolState: lifecycleTools[tool].state, applicability: 'REQUIRED', required: true, auditImpact: 'BLOCKING', reason: 'A relevant scanner or required content is unavailable for this project/profile.' }));
+  const applicability = Object.fromEntries(planned.map((item) => [item.tool, { decision: item.decision, applicability: item.decision === 'RUN' ? 'REQUIRED' : item.decision === 'NOT_APPLICABLE' ? 'NOT_APPLICABLE' : 'SKIPPED_BY_PROFILE', required: item.decision === 'RUN', auditImpact: item.decision === 'RUN' ? 'REQUIRED' : 'NONE', reason: item.reason, toolState: lifecycleTools[item.tool]?.state || null }]));
+  return { ready: blockers.length === 0, blockers, required: [...required], applicability };
+}
+
 function usage() {
   return `Vibe Code Guard ${VERSION}\n\nUsage:\n  vibe-code-guard install [--dry-run] [--yes] [--json]\n  vibe-code-guard doctor [--json]\n  vibe-code-guard audit [project] [--profile auto|quick|full|release] [--json]\n  vibe-code-guard verify <finding-id> [project] [--web-target URL] [--json]\n  vibe-code-guard rescan --finding <finding-id> [--project project] [--web-target URL] [--json]\n  vibe-code-guard tools status [--json]\n  vibe-code-guard tools check-updates [--json]\n  vibe-code-guard tools update [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard tools refresh-data [scanner] [--dry-run|--yes] [--security-reviewed] [--json]\n  vibe-code-guard dashboard [--port PORT] [--json] [--dry-run]\n  vibe-code-guard update [--check] [--yes] [--json]\n  vibe-code-guard uninstall [--dry-run] [--yes] [--json]\n  vibe-code-guard version\n\nCommands:\n  install       Preview or apply the safe Vibe Code Guard launcher/tool plan.\n  doctor        Report local workflow, toolchain, and Dashboard readiness.\n  audit         Run one change-aware local audit profile and emit findings.\n  verify        Run relevant scanners again after an authorized fix.\n  tools         Inspect or explicitly plan one upstream scanner lifecycle action.\n  dashboard     Start the human local Dashboard on 127.0.0.1 only.\n  update        Update Vibe Code Guard-owned launchers; scanner updates are untouched.\n  uninstall     Remove Vibe Code Guard-owned launchers; preserve upstream tools.\n\nAliases:\n  security-check audit .\n\nInstallation never changes shell startup files and never removes upstream scanners.`;
 }
@@ -182,18 +194,17 @@ async function commandAudit(options) {
   if (!PROFILES.has(profile)) throw new Error(`Unsupported audit profile: ${profile}`);
   const webTarget = selectRuntimeTarget(projectConfig.config.runtimeTargets, options.webTarget);
   const mode = profile === 'release' ? 'full' : profile;
+  const plan = buildExecutionPlan({ projectPath, webTarget });
   if (options.dryRun) {
-    const plan = buildExecutionPlan({ projectPath, webTarget });
     const data = { status: 'PLANNED', profile, project: projectPath, config: projectConfig, plan, dashboardUrl: dashboardState()?.dashboardUrl || null };
     return emit({ json: options.json, data, code: 0 }, `Audit plan for ${projectPath}\nProfile: ${profile}\n${plan.explanation.join('\n')}`);
   }
   const health = await doctor();
   try { health.lifecycle = await lifecycleStatus(); } catch (error) { health.lifecycle = { overall: 'DEGRADED', error: error.message }; }
-  if (health.status === 'BROKEN' || health.lifecycle.overall === 'BROKEN') {
-    const reason = health.lifecycle.overall === 'BROKEN'
-      ? 'Vibe Code Guard security tool content/runtime readiness is BROKEN; no scan was started.'
-      : 'Vibe Code Guard toolchain is BROKEN; no scan was started.';
-    const data = { status: 'BLOCKED', profile, project: projectPath, reason, doctor: health, dashboardUrl: dashboardState()?.dashboardUrl || null };
+  const readiness = auditReadiness({ health, plan: profile === 'auto' ? plan : null, profile, webTarget });
+  if (!readiness.ready) {
+    const reason = 'Relevant Vibe Code Guard scanner/content readiness is BROKEN; no scan was started.';
+    const data = { status: 'BLOCKED', profile, project: projectPath, reason, readiness, doctor: health, dashboardUrl: dashboardState()?.dashboardUrl || null };
     return emit({ json: options.json, data, code: 1 }, `Audit blocked: ${reason} Run vibe-code-guard doctor and follow any recovery action.`);
   }
   const { createRun, runAudit } = require('../server');
