@@ -30,30 +30,7 @@ learn each scanner's command line.
 _The overview brings the release decision, important findings, verification
 state, and security coverage together._
 
-## Basic flow
-
-```text
-You
-↓
-Codex / Claude Code
-↓
-Vibe Code Guard
-↓
-Independent security scanners
-↓
-Findings
-↓
-Authorized fix
-↓
-Targeted verification
-↓
-Release decision
-↓
-Dashboard
-```
-
-Humans use the Dashboard. Coding agents use the CLI and JSON output. Both read
-the same findings, lifecycle, verification, scanner status, and release gate.
+## How it works
 
 ![Vibe Code Guard Public Beta workflow: coding agent, Vibe Code Guard orchestration, upstream scanners, findings, targeted verification, release gate, and Dashboard](diagrams/vibe-code-guard-public-beta-workflow.svg)
 
@@ -61,9 +38,23 @@ _Workflow diagram: the upstream scanners provide detection engines; Vibe Code
 Guard provides the local orchestration, evidence model, lifecycle, and release
 workflow._
 
-Editable sources: [Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
+<details>
+<summary>Open the editable diagram sources</summary>
+
+[Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
 [Excalidraw](diagrams/vibe-code-guard-public-beta-workflow.excalidraw) ·
 [PNG](diagrams/vibe-code-guard-public-beta-workflow.png)
+
+</details>
+
+Humans use the Dashboard. Coding agents use the CLI and JSON output. Both read
+the same findings, lifecycle, verification, scanner status, and release gate.
+
+| Who | What they do |
+| --- | --- |
+| **Codex / Claude Code** | Understand the project, explain evidence, and make an authorized fix. |
+| **Vibe Code Guard** | Select relevant checks, orchestrate the workflow, correlate findings, track verification, and calculate the release gate. |
+| **Upstream scanners** | Provide the actual detection engines for secrets, code, dependencies, IaC, and authorized runtime checks. |
 
 ## Public Beta limitations
 
@@ -483,11 +474,16 @@ independently maintained upstream projects.
 
 ## Product explainer and implementation diagrams
 
-The first diagram is the README's main product explanation. It shows the
-division of responsibility between Vibe Code Guard and the upstream scanning
-engines, plus the workflow outputs users see.
+The Public Beta workflow diagram above is the main README visual. It shows the
+division of responsibility between the coding agent, Vibe Code Guard, and the
+upstream scanning engines, plus the workflow outputs users see.
 
-- **Main product explainer:** [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
+- **Public Beta workflow:** [SVG](diagrams/vibe-code-guard-public-beta-workflow.svg) ·
+  [Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
+  [Excalidraw](diagrams/vibe-code-guard-public-beta-workflow.excalidraw) ·
+  [PNG](diagrams/vibe-code-guard-public-beta-workflow.png)
+
+- **Detailed product explainer:** [Next AI Draw.io animated SVG](diagrams/vibe-code-guard-explainer-next-ai-drawio.svg) ·
   [draw.io source](diagrams/vibe-code-guard-explainer.drawio) ·
   [Mermaid](diagrams/vibe-code-guard-explainer.mmd) ·
   [Excalidraw](diagrams/vibe-code-guard-explainer.excalidraw) ·
@@ -499,11 +495,6 @@ engines, plus the workflow outputs users see.
   [draw.io source](diagrams/vibe-code-guard-flow.drawio) ·
   [Mermaid](diagrams/vibe-code-guard-flow.mmd) ·
   [Excalidraw](diagrams/vibe-code-guard-flow.excalidraw)
-
-- **Public Beta workflow:** [SVG](diagrams/vibe-code-guard-public-beta-workflow.svg) ·
-  [Mermaid](diagrams/vibe-code-guard-public-beta-workflow.mmd) ·
-  [Excalidraw](diagrams/vibe-code-guard-public-beta-workflow.excalidraw) ·
-  [PNG](diagrams/vibe-code-guard-public-beta-workflow.png)
 
 The diagrams describe this repository's own architecture. The draw.io source
 can be refined with [Next AI Draw.io](https://github.com/DayuanJiang/next-ai-draw-io);
