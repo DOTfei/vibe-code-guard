@@ -2,7 +2,7 @@
 
 **A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
 
-`v0.7.0-alpha` · Early Alpha / Active Development · macOS Apple Silicon validated
+`v0.8.0-beta` · Public Beta packaging / Active Development · macOS Apple Silicon validated
 
 AI coding is fast. Security tooling is fragmented.
 
@@ -19,32 +19,48 @@ usable.**
 
 Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
 
-## Using Codex / Claude Code?
+## The first-use experience
+
+Vibe Code Guard is for people who build with Codex, Claude Code, Gemini CLI,
+Cursor agents, or similar coding agents and want a local security workflow
+without learning eight scanner command lines.
 
 Give your coding agent this repository and say:
 
 ```text
-Install and use Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard,
-then security audit this project.
+Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
+and security audit this project.
 ```
 
-The agent handles installation, toolchain checks, project discovery, the
-appropriate audit profile, structured findings, explanations, and Dashboard
-access. You do not need to learn eight scanner commands. The scanners remain
-independently installed upstream tools; Vibe Code Guard supplies the safe
-workflow around them.
+The agent should safely plan installation, check the local toolchain, discover
+the project, select relevant checks, run the audit, read the structured result,
+and show the local Dashboard. The scanners remain independently installed
+upstream tools; Vibe Code Guard supplies the safe workflow around them.
+
+If the audit finds a release-blocking issue, the next user prompt can be:
+
+```text
+Fix the current release-blocking security issues. Ask before changing code,
+then run targeted verification and report the final release status.
+```
+
+Agents use CLI/JSON as the machine interface. Humans use the Dashboard as the
+visual interface. Both read the same persisted findings, lifecycle,
+verification, scanner state, and release gate.
 
 See [`AGENTS.md`](AGENTS.md) and
 [`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
 agent workflow and JSON contracts.
 
-v0.7 adds a safe real-workflow validation harness using temporary projects and
+v0.8 packages a clearer first-screen Dashboard and public-beta onboarding. It
+keeps the v0.7 safe real-workflow validation harness using temporary projects and
 mock scanner executables. It exercises the same agent-facing install, doctor,
 audit, correlation, Dashboard, fix, targeted verification, and release-gate
 paths without changing the host toolchain or contacting public targets. See
 [`docs/public-beta-readiness.md`](docs/public-beta-readiness.md) and the
 [`v0.7 friction log`](docs/e2e-friction-log.md) for the tested boundary and
-known limitations.
+known limitations. Maintainers can use the [safe public-beta demo](docs/public-beta-demo.md)
+to review the Dashboard states without public targets or real credentials.
 
 ## What this project is
 
@@ -206,6 +222,13 @@ explicitly triggered AI Security Review that explains selected redacted
 Correlated Finding context; it remains advisory and cannot change deterministic
 security state. See [AI Security Review documentation](docs/ai-security-review.md).
 
+The Dashboard's first screen answers the human questions first: can this
+project be deployed according to the canonical gate, which issues need
+attention, whether a fix was actually verified, and whether scanner coverage
+is degraded. Technical scanner observations remain available in the Findings
+and Toolkit views. A clean result means no current release-blocking findings
+were detected by the checks that ran; it is not a security guarantee.
+
 ## How to use it
 
 ### Install with one safe entrypoint
@@ -298,7 +321,7 @@ npm run ai-review -- --run-dir "$SECURITY_DASHBOARD_DATA_DIR/<run-id>" --finding
 ## Safety boundaries
 
 No scanner or combination of scanners can guarantee that software is
-vulnerability-free. Vibe Code Guard is an early-alpha engineering aid, not a
+vulnerability-free. Vibe Code Guard is a public-beta engineering aid, not a
 security warranty, certification, or substitute for qualified human review.
 
 Active testing is restricted by design:
@@ -369,7 +392,7 @@ notices intact.
 
 ## What is complete—and what is not
 
-Current early-alpha capabilities:
+Current public-beta capabilities:
 
 - deterministic change detection, risk classification, policy evaluation, and
   tool selection;
@@ -412,7 +435,9 @@ Planned milestones, not current promises:
 - **v0.7 — Real-world Agent E2E + Release Hardening:** synthetic fixture matrix,
   isolated agent walkthroughs, Dashboard/verification validation, CLI contract
   checks, and release-readiness documentation ✅;
-- **v0.8 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
+- **v0.8 — Dashboard UX + Public Beta Packaging:** clearer release, finding,
+  verification, toolchain, onboarding, and safe demo surfaces ✅;
+- **v0.9 — Optional Strix Deep Audit:** explicit, authorized agentic testing;
 - **v1.0 — Stable Security Review Platform:** after broader testing, review,
   and documentation.
 

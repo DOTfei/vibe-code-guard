@@ -35,6 +35,13 @@ Agent-facing JSON includes `schemaVersion: "1.0"` and `workflowVersion: "0.7.0"`
 Read `releaseGate` separately from the process exit code: a completed audit can
 be `DO NOT DEPLOY` without being an operational command failure.
 
+The Dashboard is the human presentation layer over that same canonical state.
+Agents must use CLI/JSON rather than scrape Dashboard HTML. Humans should see
+the release decision, important issues, verification state, and degraded
+coverage before technical scanner details. The Dashboard must never turn
+`FIXED` into `VERIFIED`, hide `VERIFICATION_INCOMPLETE`, or replace the
+canonical release gate.
+
 ## When the user asks for a security audit
 
 For requests such as “security audit this project”, “check whether this app is
@@ -110,5 +117,5 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
 
 The intended first-run instruction is:
 
-> Install and use Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard,
-> then security audit this project.
+> Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
+> and security audit this project.

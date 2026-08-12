@@ -79,7 +79,7 @@ unambiguous `vibe-code-guard` command when a name conflict is reported.
   "schemaVersion": "1.0",
   "workflowVersion": "0.7.0",
   "status": "READY",
-  "version": "0.7.0-alpha",
+  "version": "0.8.0-beta",
   "toolchain": {
     "gitleaks": {
       "status": "READY",
