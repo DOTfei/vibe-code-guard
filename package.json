@@ -1,6 +1,6 @@
 {
   "name": "vibe-code-guard",
-  "version": "0.7.0-alpha",
+  "version": "0.8.0-beta",
   "private": true,
   "description": "Local-first security workflow for AI coding agents and vibe-coded software.",
   "license": "Apache-2.0",

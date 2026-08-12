@@ -5,6 +5,20 @@ workflow with safe temporary projects. It is intentionally separate from
 scanner findings: the entries below describe product usability or test
 environment behavior, not vulnerabilities in a user's application.
 
+## v0.8 public-beta UX review
+
+| Priority | Friction | Handling |
+| --- | --- | --- |
+| P1 | Release status was easy to miss among scanner details. | The Dashboard first screen now promotes the canonical release decision and explains its reason. |
+| P1 | `FIXED` could be read as proof that the issue was gone. | Finding cards use “Fix applied · not verified” and keep the canonical status visible as technical detail. |
+| P1 | A degraded scanner could look like a completed pass. | Coverage and toolchain summaries explicitly count limited checks and preserve degraded states. |
+| P1 | First-time users did not know what to tell Codex or Claude Code. | README, Dashboard, AGENTS.md, and CLAUDE.md expose one copy-paste install/audit prompt. |
+| P2 | Scanner terminology is still useful to maintainers but noisy for new users. | Human lifecycle and release labels lead; scanner observations remain in Findings and Toolkit technical sections. |
+| P2 | A Dashboard screenshot can be mistaken for an agent API. | Documentation states that agents use CLI/JSON and humans use the Dashboard over the same canonical state. |
+| P2 | Public-beta support varies by operating system and scanner freshness. | Support matrix and real-scanner taxonomy remain explicit; no host mutation is performed to force green checks. |
+
+These are product-friction observations, not claims that a project is secure.
+
 ## Resolved
 
 | Area | Friction | Resolution |

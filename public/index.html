@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#f4f6f8" />
-    <title>Local Security Dashboard</title>
+    <title>Vibe Code Guard · Local Security Dashboard</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -21,8 +21,8 @@
         <div class="brand-lockup">
           <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
           <div>
-            <p class="brand-name">Security<br />Dashboard</p>
-            <p class="brand-subtitle">local observability</p>
+            <p class="brand-name">Vibe Code<br />Guard</p>
+            <p class="brand-subtitle">local security workflow</p>
           </div>
         </div>
         <div class="local-badge"><span class="status-dot status-dot--green"></span><span>127.0.0.1 only</span></div>
@@ -41,7 +41,7 @@
       <main class="main-content">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Local Security Workstation</p>
+            <p class="eyebrow">Vibe Code Guard · Public Beta</p>
             <h1 id="page-title">Audit overview</h1>
           </div>
           <div class="topbar-actions">
@@ -70,6 +70,17 @@
 
         <div class="views">
           <section class="view is-active" id="view-overview" data-view-panel="overview">
+            <section class="onboarding-hero panel" id="onboarding-hero" aria-labelledby="onboarding-title">
+              <div>
+                <p class="eyebrow">For Codex, Claude Code, and vibe coders</p>
+                <h2 id="onboarding-title">See what is safe to ship.</h2>
+                <p>Vibe Code Guard combines independently installed open-source scanners into one local workflow. The Dashboard explains what ran, what matters, and what still needs review.</p>
+              </div>
+              <div class="onboarding-actions">
+                <button class="button button--primary" id="copy-agent-prompt" type="button">Copy agent prompt</button>
+                <span class="onboarding-note">No account · no telemetry · localhost only</span>
+              </div>
+            </section>
             <div class="overview-heading">
               <div>
                 <p class="eyebrow">Current assessment</p>
@@ -115,6 +126,33 @@
                 <p class="summary-explanation" id="summary-explanation">The current screen will reflect real scanner events as they arrive.</p>
               </article>
             </div>
+
+            <section class="decision-strip" aria-label="Assessment at a glance">
+              <article class="decision-card panel" id="decision-card">
+                <div class="decision-card-header"><div><p class="eyebrow">First answer</p><h3 id="decision-label">No audit yet</h3></div><span class="decision-arrow" aria-hidden="true">→</span></div>
+                <p id="decision-reason">Run an audit to establish local evidence.</p>
+                <small id="decision-canonical">Canonical gate: waiting</small>
+              </article>
+              <article class="decision-card panel">
+                <div class="decision-card-header"><div><p class="eyebrow">Important issues</p><h3 id="priority-count">No findings yet</h3></div><button class="text-button" id="open-priority-findings" type="button">View findings</button></div>
+                <div class="priority-inline" id="priority-inline">The Dashboard will put unresolved Critical and High issues first.</div>
+              </article>
+              <article class="decision-card panel">
+                <div class="decision-card-header"><div><p class="eyebrow">Verification</p><h3 id="verification-summary-label">Not started</h3></div><span class="status-chip status-chip--neutral" id="verification-summary-chip">WAITING</span></div>
+                <p id="verification-summary-detail">A finding is not verified merely because code was marked fixed.</p>
+              </article>
+            </section>
+
+            <section class="coverage-panel panel" aria-live="polite">
+              <div class="coverage-panel-header"><div><p class="eyebrow">Coverage honesty</p><h3>What the result includes</h3></div><span class="status-chip status-chip--neutral" id="coverage-summary-chip">WAITING</span></div>
+              <p id="coverage-summary-detail">Start an audit to see completed, skipped, and degraded checks.</p>
+              <div class="coverage-meta"><span id="toolchain-summary-label">Toolchain not checked</span><span id="toolchain-summary-detail">Run Toolkit health for current local status.</span></div>
+            </section>
+
+            <section class="priority-panel section-block" id="priority-panel" aria-live="polite">
+              <div class="section-heading"><div><p class="eyebrow">Act on this first</p><h3>Important issues</h3></div><button class="text-button" id="priority-findings-link" type="button">Open all findings</button></div>
+              <div class="priority-list" id="priority-findings"></div>
+            </section>
 
             <section class="orchestration-panel panel" aria-live="polite">
               <div class="panel-header"><div><p class="eyebrow">Decision record</p><h3>Automatic plan</h3></div><span class="status-chip status-chip--neutral" id="orchestration-risk">N/A</span></div>
@@ -195,6 +233,7 @@
       <pre id="report-content">Report is not ready yet.</pre>
     </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/view-model.js"></script>
     <script src="/app.js" defer></script>
   </body>
 </html>

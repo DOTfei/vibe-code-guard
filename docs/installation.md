@@ -6,7 +6,7 @@ Vibe Code Guard-owned launchers under `$SECURITY_TOOLKIT_HOME` (default:
 
 ## Platform support
 
-v0.7 is intentionally conservative about platform claims:
+v0.8 is intentionally conservative about platform claims:
 
 | Platform | Status | Notes |
 | --- | --- | --- |

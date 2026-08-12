@@ -1,8 +1,20 @@
-# Public Beta Readiness — v0.7.1
+# Public Beta Readiness — v0.8
 
-Vibe Code Guard remains an early-alpha, local-first security workflow. This
-checklist describes what v0.7 and v0.7.1 validate and what they deliberately
-do not promise.
+Vibe Code Guard is a local-first public beta security workflow for AI coding
+agents and vibe coders. This checklist describes the v0.8 Dashboard and
+packaging experience on top of the v0.7/v0.7.1 evidence boundary. It does not
+upgrade partial real-scanner evidence into a broader security claim.
+
+## Status vocabulary
+
+- `PASS`: the named product contract is covered by deterministic tests or the
+  stated local evidence.
+- `DEGRADED`: the workflow remains usable, but tool, content, platform, or
+  environment coverage has a documented limitation.
+- `BLOCKED`: the requested validation depends on an unavailable external or
+  host capability and must not be presented as a clean result.
+- `NOT_TESTED`: the validation dimension was not performed. It is not a
+  failure and is not an implied pass.
 
 ## User path validated by the E2E harness
 
@@ -26,7 +38,7 @@ global scanner installation.
 
 ## Release checklist
 
-| Area | Status | Evidence class | v0.7/v0.7.1 position |
+| Area | Status | Evidence class | v0.8 position |
 | --- | --- | --- | --- |
 | Install | PASS | Real dry-run + isolated tests | `./install.sh --dry-run` is the safe preview; missing/prerequisite/conflict states are tested without host mutation. |
 | Uninstall | PASS | Existing deterministic tests | Removes only Vibe Code Guard-owned launchers/metadata and preserves upstream scanners and unrelated files. |
@@ -36,8 +48,21 @@ global scanner installation.
 | Fix/verify | PASS | Mock E2E + real disposable fixtures | Only an authorized external agent changes application code. Verification requires relevant coverage, known versions, valid structured output, stable scope, and a successful rescan. Real Gitleaks/TruffleHog-family and Checkov/Trivy-config chains completed; real still-detected and incomplete-coverage paths were also exercised. |
 | Updater | PASS | Dry-run + lifecycle tests | `vibe-code-guard update` manages only Vibe Code Guard launchers. Scanner updates are one-tool, official-source, explicit, validated lifecycle operations. |
 | Ownership | PASS | Documentation/metadata review | Upstream scanners are independently installed, not bundled, not modified, not relicensed, and not claimed as Vibe Code Guard work. |
-| Privacy | PASS | Static review + regression tests | Normal Vibe Code Guard operations are local-only. v0.4 advisory AI is disabled by default; no real provider is included in v0.7. |
+| Privacy | PASS | Static review + regression tests | Normal Vibe Code Guard operations are local-only. v0.4 advisory AI is disabled by default; no real provider is included in v0.8. |
 | Scope | PASS | Runtime/security tests + real Nuclei localhost smoke | ZAP/Nuclei require localhost, local Docker, or exact explicit authorization. `0.0.0.0` and arbitrary public targets are rejected. |
+| Findings | PASS | Canonical JSON + Dashboard view-model tests | The Dashboard reads correlated findings, keeps raw evidence available, prioritizes release attention, and preserves historical v0.2 data. |
+| Fix lifecycle | PASS | Canonical lifecycle + UI regression tests | `FIXED` is displayed as not verified; `VERIFIED` is displayed only when the canonical lifecycle says so. |
+| Targeted verify | PASS | Existing v0.6/v0.7 contracts | Dashboard exposes verification state and next action without marking a finding verified itself. |
+| Release gate | PASS | Canonical gate + presentation tests | Human labels distinguish `SAFE TO DEPLOY`, `DO NOT DEPLOY`, `REVIEW REQUIRED`, and `INCOMPLETE SECURITY COVERAGE`; the canonical gate remains authoritative. |
+| Degraded behavior | PASS | View-model + toolchain contract tests | Skipped, stale, missing, degraded, and unknown coverage remains visible and is not rendered as green completion. |
+| README onboarding | PASS | Documentation review | The first screen gives one copy-paste agent prompt and explains the install → doctor → audit → Dashboard path. |
+| Agent onboarding | PASS | AGENTS/CLAUDE/docs contract | Agents use CLI/JSON; humans use the Dashboard; both consume the same canonical state. |
+| Demo flow | PASS | Safe synthetic fixture instructions | The maintainer demo uses local temporary data only; it does not package or launch a vulnerable public service. |
+| Real scanner validation | DEGRADED | v0.7.1 real-scanner report | Gitleaks, Checkov, and the tested Trivy config path are `REAL_VALIDATED`; partial, blocked, and not-tested dimensions remain documented below. |
+| Privacy/local-first | PASS | Static review + regression tests | No cloud backend, account, telemetry, analytics, source upload, or public-target default active scanning was added. |
+| Attribution/licenses | PASS | Documentation/metadata review | Upstream tools remain independently installed, attributed, and separately licensed. Downloaded rules, templates, databases, plugins, add-ons, and other artifacts may have separate terms. |
+| Support matrix | DEGRADED | Platform and fixture evidence | macOS Apple Silicon is the primary supported path; other platforms remain partial or not supported as stated below. |
+| Limitations | PASS | Public-beta documentation review | The release does not promise complete vulnerability coverage, professional pentesting replacement, or a secure result. |
 
 ## Real scanner smoke boundary
 
@@ -139,3 +164,22 @@ dependency intelligence is blocked by the current external network
 environment; the Trivy database is usable but expired; Semgrep's normal
 HOME/log path and ZAP content freshness remain environment-sensitive; and
 active ZAP/Nuclei finding detection was not completed.
+
+## Dashboard and agent acceptance
+
+The human first screen is organized around project status, release decision,
+important issues, verification, coverage/toolchain health, and recent activity.
+Scanner names and raw observations remain available as technical details.
+
+The Dashboard does not become an agent API. A coding agent should use:
+
+```text
+vibe-code-guard doctor --json
+vibe-code-guard audit . --profile auto --json
+vibe-code-guard dashboard --json
+```
+
+The Dashboard and CLI read the same run state. The Dashboard is a presentation
+layer: it cannot change severity, lifecycle, scanner evidence, verification,
+or the release gate. The copy prompt contains finding IDs, severity, titles,
+and locations only; it does not copy raw evidence or secret values.

@@ -7,6 +7,7 @@ const STAGES = [
 
 const TOOL_ORDER = ['gitleaks', 'trufflehog', 'semgrep', 'trivy', 'osv-scanner', 'checkov', 'zap', 'nuclei'];
 const PAGE_TITLES = { overview: 'Audit overview', findings: 'Findings', history: 'Scan history', toolkit: 'Toolkit health' };
+const DashboardVM = window.VCGDashboardViewModel;
 
 let appState = { latest: null, runs: [] };
 let toolkitState = null;
@@ -51,7 +52,8 @@ function statusClass(status) {
   if (value === 'running' || value === 'scanning') return 'running';
   if (value === 'pass' || value === 'healthy' || value === 'verified') return 'pass';
   if (value === 'warning' || value === 'pass with warnings' || value === 'skipped' || value === 'fixed' || value === 'false_positive' || value === 'accepted_risk') return 'warning';
-  if (value === 'fail' || value === 'broken' || value === 'error' || value === 'open' || value === 'reopened') return 'fail';
+  if (value === 'fail' || value === 'broken' || value === 'error' || value === 'open' || value === 'reopened' || value === 'still_detected') return 'fail';
+  if (value === 'verification_incomplete' || value === 'degraded' || value === 'incomplete security coverage') return 'warning';
   if (value === 'stale' || value === 'failed' || value === 'not_generated') return value === 'failed' ? 'fail' : 'warning';
   return 'neutral';
 }
@@ -152,6 +154,46 @@ function renderActivity(run) {
   }).join('');
 }
 
+function renderPriority(run) {
+  const findings = allFindings();
+  const selected = DashboardVM.priorityFindings(findings, run, 3);
+  const decision = DashboardVM.releaseDecision(run);
+  const verification = DashboardVM.verificationSummary(run);
+  const coverage = DashboardVM.coverageSummary(run);
+  const toolchain = DashboardVM.toolchainSummary(toolkitState);
+  const decisionCard = $('#decision-card');
+  $('#onboarding-hero').classList.toggle('is-hidden', Boolean(run));
+  $('#decision-label').textContent = decision.label;
+  $('#decision-reason').textContent = decision.reason;
+  $('#decision-canonical').textContent = decision.canonicalLabel ? `Canonical gate: ${decision.canonicalLabel}` : 'Canonical gate: waiting';
+  decisionCard.dataset.state = decision.tone;
+  $('#priority-count').textContent = selected.length ? `${selected.length} to review first` : (run ? 'No correlated findings' : 'No findings yet');
+  $('#priority-inline').textContent = selected.length
+    ? selected.map((finding) => `${finding.severity} · ${finding.title}`).join('  ·  ')
+    : run ? 'No findings were returned by the selected run.' : 'The Dashboard will put unresolved Critical and High issues first.';
+  $('#verification-summary-label').textContent = verification.label;
+  $('#verification-summary-chip').className = `status-chip status-chip--${verification.tone}`;
+  $('#verification-summary-chip').textContent = verification.label.toUpperCase();
+  $('#verification-summary-detail').textContent = verification.detail;
+  $('#coverage-summary-chip').className = `status-chip status-chip--${coverage.tone}`;
+  $('#coverage-summary-chip').textContent = coverage.label.toUpperCase();
+  $('#coverage-summary-detail').textContent = coverage.detail;
+  $('#toolchain-summary-label').textContent = `Toolchain: ${toolchain.label}`;
+  $('#toolchain-summary-detail').textContent = toolchain.detail;
+  const container = $('#priority-findings');
+  if (!selected.length) {
+    container.innerHTML = `<div class="empty-state">${run ? 'No correlated findings for this run. Review coverage and scanner status before treating a clean result as a guarantee.' : 'Start a local audit to see the issues that need attention first.'}</div>`;
+    return;
+  }
+  container.innerHTML = selected.map((finding) => `<article class="priority-row priority-row--${finding.lifecycle.tone}">
+    <div class="priority-marker" aria-hidden="true"></div>
+    <div class="priority-copy"><div class="priority-title"><strong>${escapeHTML(finding.title)}</strong><span class="severity-label severity-label--${String(finding.severity || 'unknown').toLowerCase()}">${escapeHTML(finding.severity || 'UNKNOWN')}</span></div><span>${escapeHTML(finding.id)} · ${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</span></div>
+    <div class="priority-state"><strong>${escapeHTML(finding.lifecycle.label)}</strong><span>${finding.releaseBlocking ? 'Release gate attention' : 'Review evidence'}</span></div>
+    <button class="button button--ghost priority-open" data-finding-id="${escapeHTML(finding.id)}" type="button">Open</button>
+  </article>`).join('');
+  $$('.priority-open').forEach((button) => button.addEventListener('click', () => { findingFilter = 'ALL'; setView('findings'); }));
+}
+
 function renderOverview() {
   const run = currentRun();
   $('#open-report').disabled = !run;
@@ -183,12 +225,17 @@ function renderOverview() {
   const overall = $('#overall-status');
   overall.className = `status-chip status-chip--${statusClass(run?.status)}`;
   overall.textContent = run?.status || 'WAITING';
+  const decision = DashboardVM.releaseDecision(run);
+  $('#gate-label').textContent = decision.label === 'NO AUDIT YET' ? 'Assessment pending' : decision.label;
+  $('#gate-rule').textContent = decision.reason;
   $('#gate-panel').dataset.state = statusClass(run?.status);
+  $('#gate-panel').dataset.decision = decision.tone;
   renderPipeline(run);
   renderTools(run);
   renderOrchestration(run);
   renderAISummary(run);
   renderActivity(run);
+  renderPriority(run);
   const totalFindings = run ? (summary.total || 0) : 0;
   $('#nav-findings-count').textContent = run ? String(totalFindings) : '—';
 }
@@ -247,7 +294,7 @@ function allFindings() {
 
 function renderFindings() {
   const run = currentRun();
-  const findings = allFindings();
+  const findings = DashboardVM.priorityFindings(allFindings(), run, allFindings().length);
   const counts = findings.reduce((result, finding) => { result[finding.severity] = (result[finding.severity] || 0) + 1; result.ALL += 1; return result; }, { ALL: 0, CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0, UNKNOWN: 0 });
   Object.entries(counts).forEach(([key, value]) => { const el = $(`#finding-count-${key.toLowerCase()}`); if (el) el.textContent = value; });
   $('#finding-run-label').textContent = currentRun() ? `${currentRun().projectName} · ${currentRun().id}` : 'No run selected';
@@ -263,17 +310,19 @@ function renderFindings() {
     const detectedBy = [...new Set(observations.map((observation) => observation.scanner).filter(Boolean))];
     const rawFindings = (run?.findings || []).filter((raw) => observations.some((observation) => observation.scannerFindingId === raw.id));
     const lastEvent = finding.history?.[finding.history.length - 1];
-    const terminal = ['FALSE_POSITIVE', 'ACCEPTED_RISK'].includes(finding.status);
+    const lifecycle = DashboardVM.friendlyLifecycle(finding.status);
+    const terminal = ['FALSE_POSITIVE', 'ACCEPTED_RISK', 'VERIFIED'].includes(finding.status);
     const actions = terminal
-      ? `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>`
+      ? finding.status === 'VERIFIED' ? '<span class="finding-action-note">Verified by relevant scanner coverage.</span>' : `<button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Reopen manually</button>`
       : finding.status === 'FIXED' || finding.status === 'FIXING'
         ? `<button class="button button--secondary finding-verify" data-finding-id="${escapeHTML(finding.id)}" type="button">Verify fix</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="OPEN" type="button">Keep open</button>`
         : `<button class="button button--secondary finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FIXED" type="button">Mark as fixed</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="FALSE_POSITIVE" type="button">False positive</button><button class="button button--ghost finding-action" data-finding-id="${escapeHTML(finding.id)}" data-action-status="ACCEPTED_RISK" type="button">Accept risk</button>`;
     return `<article class="finding-card finding-card--${statusClass(finding.status)}">
-      <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${observations.length} observation${observations.length === 1 ? '' : 's'}</span></div><div class="finding-badges"><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span><span class="lifecycle-label lifecycle-label--${statusClass(finding.status)}">${escapeHTML(finding.status)}</span></div></div>
-      <div class="finding-grid"><div class="finding-section"><span>Detected by</span><p>${escapeHTML(detectedBy.join(' · ') || 'Historical compatibility view')}</p></div><div class="finding-section"><span>Location</span><p>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</p></div><div class="finding-section"><span>Correlation confidence</span><p>${escapeHTML(finding.confidence || 'NONE')}</p></div></div>
+      <div class="finding-top"><div><h3 class="finding-title">${escapeHTML(finding.title)}</h3><span class="finding-id">${escapeHTML(finding.id)} · ${observations.length} observation${observations.length === 1 ? '' : 's'}</span></div><div class="finding-badges"><span class="severity-label severity-label--${String(finding.severity).toLowerCase()}">${escapeHTML(finding.severity)}</span><span class="lifecycle-label lifecycle-label--${lifecycle.tone}">${escapeHTML(lifecycle.label)}</span>${finding.releaseBlocking ? '<span class="finding-gate-badge">Release attention</span>' : ''}</div></div>
+      <p class="finding-lifecycle-help">${escapeHTML(lifecycle.detail)}</p>
+      <div class="finding-grid"><div class="finding-section"><span>Detected by</span><p>${escapeHTML(detectedBy.join(' · ') || 'Historical compatibility view')}</p></div><div class="finding-section"><span>Location</span><p>${escapeHTML(finding.location?.file || finding.location?.endpoint || 'Location not supplied')}</p></div><div class="finding-section"><span>Correlation confidence</span><p>${escapeHTML(finding.confidence || 'NONE')}</p></div><div class="finding-section"><span>Verification</span><p>${escapeHTML(finding.status === 'VERIFIED' ? 'VERIFIED' : finding.status === 'FIXED' ? 'NOT VERIFIED' : 'RELEVANT RESCAN REQUIRED')}</p></div><div class="finding-section"><span>Remediation direction</span><p>${escapeHTML(finding.remediation?.summary || 'Review scanner evidence and apply the smallest safe fix.')}</p></div></div>
       <details class="finding-observation-details"><summary>Show ${observations.length} scanner observation${observations.length === 1 ? '' : 's'}</summary><div class="finding-observations">${observations.map((observation) => `<span>${escapeHTML(observation.scanner || 'unknown')} · ${escapeHTML(observation.scannerVersion || 'version unknown')} · ${escapeHTML(observation.ruleId || 'rule')} · ${escapeHTML(observation.runId || 'run')}</span>`).join('')}</div>${rawFindings.length ? `<pre>${escapeHTML(JSON.stringify(rawFindings, null, 2))}</pre>` : '<p class="finding-raw-note">Raw Unified Findings are available in the run API for historical observations.</p>'}</details>
-      <div class="finding-footer"><span>${lastEvent ? `${escapeHTML(lastEvent.event)} · ${escapeHTML(formatDate(lastEvent.timestamp))}` : 'No lifecycle history'}</span><span class="finding-status">${escapeHTML(finding.status)}</span></div>
+      <div class="finding-footer"><span>${lastEvent ? `${escapeHTML(lastEvent.event)} · ${escapeHTML(formatDate(lastEvent.timestamp))}` : 'No lifecycle history'}</span><span class="finding-status">Canonical: ${escapeHTML(finding.status)}</span></div>
       <div class="finding-actions">${actions}</div>
       ${renderAIReviewPanel(finding, run)}
     </article>`;
@@ -439,7 +488,7 @@ async function refreshState({ keepSelection = true } = {}) {
 }
 
 async function refreshToolkit() {
-  try { toolkitState = await requestJSON('/api/toolkit'); renderToolkit(); } catch (error) { showToast(error.message); }
+  try { toolkitState = await requestJSON('/api/toolkit'); renderToolkit(); renderPriority(currentRun()); } catch (error) { showToast(error.message); }
 }
 
 function subscribeToRun(runId) {
@@ -541,6 +590,29 @@ function wireEvents() {
   $('#run-self-test').addEventListener('click', runSelfTest);
   $('#check-tool-updates').addEventListener('click', checkToolUpdates);
   $('#view-tool-update-plan').addEventListener('click', viewToolUpdatePlan);
+  const copyPrompt = $('#copy-agent-prompt');
+  if (copyPrompt) copyPrompt.addEventListener('click', async () => {
+    const prompt = DashboardVM.buildAgentPrompt(currentRun(), allFindings());
+    try {
+      await navigator.clipboard.writeText(prompt);
+      showToast('Agent prompt copied.');
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = prompt;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      document.execCommand('copy');
+      area.remove();
+      showToast('Agent prompt copied.');
+    }
+  });
+  ['open-priority-findings', 'priority-findings-link'].forEach((id) => {
+    const button = $(`#${id}`);
+    if (button) button.addEventListener('click', () => setView('findings'));
+  });
   $('#run-ai-summary').addEventListener('click', () => runAISummary('RUN_SUMMARY'));
   $('#run-ai-release').addEventListener('click', () => runAISummary('RELEASE_REVIEW'));
   $$('.filter-tab').forEach((tab) => tab.addEventListener('click', () => { findingFilter = tab.dataset.severity; renderFindings(); }));
