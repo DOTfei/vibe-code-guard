@@ -40,7 +40,7 @@ global scanner installation.
 
 | Area | Status | Evidence class | v0.8 position |
 | --- | --- | --- | --- |
-| Install | PASS | Real dry-run + isolated tests | `./install.sh --dry-run` is the safe preview; missing/prerequisite/conflict states are tested without host mutation. |
+| Install | PASS WITH ACTION STATES | Real dry-run + isolated tests | `./install.sh --dry-run` is the safe preview; launcher installation is distinct from scanner readiness. Missing content/runtime returns actionable `INSTALLED_WITH_ACTION_REQUIRED`, never a false ready. |
 | Uninstall | PASS | Existing deterministic tests | Removes only Vibe Code Guard-owned launchers/metadata and preserves upstream scanners and unrelated files. |
 | Doctor | DEGRADED | Real toolchain health | Reports `READY`, `DEGRADED`, or `BROKEN`; this machine remains degraded because Semgrep/ZAP version paths and content freshness require review. |
 | Audit | PASS | Mock E2E; real smoke separate | `vibe-code-guard audit . --profile auto|quick|full|release --json`; the agent need not call eight scanners individually. |

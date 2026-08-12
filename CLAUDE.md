@@ -4,6 +4,11 @@ Use the canonical Vibe Code Guard agent workflow in
 [`docs/agent-integration.md`](docs/agent-integration.md) and the repository
 rules in [`AGENTS.md`](AGENTS.md).
 
+Installation can finish with `INSTALLED_WITH_ACTION_REQUIRED`: inspect doctor
+JSON recovery actions, explain explicit content/runtime refreshes, run only the
+supplied Vibe Code Guard command after authorization, then re-run doctor before
+auditing.
+
 When the user says “Use Vibe Code Guard to audit this project”, run the
 agent-readable workflow:
 

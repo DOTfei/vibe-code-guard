@@ -59,6 +59,14 @@ vibe-code-guard audit . --profile auto --json
 vibe-code-guard dashboard --json
 ```
 
+Installation and security readiness are reported separately. A successful
+launcher installation may return `INSTALLED_WITH_ACTION_REQUIRED` when a
+required scanner database or runtime is not ready. Read the doctor's
+`lifecycle.tools[*].readiness.recovery` field, explain any mutation to the
+user, run the supplied Vibe Code Guard command explicitly, then run doctor
+again before auditing. Do not invent a database or use scanner-specific
+random installation instructions.
+
 If the launcher is not installed yet, use the local equivalent:
 
 ```bash
@@ -108,6 +116,15 @@ When a tool is `DEGRADED`, the agent may continue known-good deterministic
 checks that do not depend on the unavailable capability, but must call out the
 missing coverage and must not describe the audit as complete or secure. A
 `BROKEN` required tool blocks the workflow until the local failure is resolved.
+For example, a present Trivy binary with missing DB content is represented as
+an installed launcher plus a blocking content recovery action:
+
+```text
+vibe-code-guard tools refresh-data trivy
+```
+
+This command is a plan by default and requires explicit confirmation and the
+existing official-source trust checks before mutating scanner content.
 
 Every JSON response from the agent-facing CLI includes `schemaVersion: "1.0"`
 and `workflowVersion: "0.7.0"`. The stable command contract is:

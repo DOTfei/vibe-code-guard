@@ -60,6 +60,11 @@ safe”, “scan before deploy”, or “run Vibe Code Guard”:
    request authorizes the plan. Read the returned `localEntrypoints.pathHint`;
    because the installer never edits shell startup files, use the returned
    absolute launcher path if `vibe-code-guard` is not already on PATH.
+   Installation success and scanner readiness are separate. After installation,
+   inspect `doctor --json` and its lifecycle recovery actions. Explain any
+   content/runtime refresh to the user and run only the supplied Vibe Code Guard
+   recovery command with explicit authorization; never invent missing scanner
+   content or use random upstream setup scripts.
 6. Run one profile through the canonical command; do not invoke the eight
    upstream scanners individually:
 

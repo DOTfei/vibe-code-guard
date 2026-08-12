@@ -37,6 +37,12 @@ the project, select relevant checks, run the audit, read the structured result,
 and show the local Dashboard. The scanners remain independently installed
 upstream tools; Vibe Code Guard supplies the safe workflow around them.
 
+The launcher installation and scanner readiness are reported separately. If a
+first-run database or runtime component is missing, the agent will show an
+action-required recovery command, ask before refreshing external scanner
+content, re-run doctor, and only then continue the audit. It never fakes a
+database or silently updates scanners.
+
 If the audit finds a release-blocking issue, the next user prompt can be:
 
 ```text

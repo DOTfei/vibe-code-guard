@@ -14,6 +14,7 @@ const {
   lifecycleStatus,
   parseVersion,
   provenanceFor,
+  recoveryFor,
   readState,
   refreshContent,
   statePath,
@@ -209,6 +210,72 @@ test('content freshness reports missing Trivy metadata without claiming current'
   } finally {
     if (previous === undefined) delete process.env.TRIVY_CACHE_DIR;
     else process.env.TRIVY_CACHE_DIR = previous;
+    fs.rmSync(cache, { recursive: true, force: true });
+  }
+});
+
+test('missing required content exposes an explicit, confirmed VCG recovery action', () => {
+  const trivy = loadManifest().tools.find((item) => item.id === 'trivy');
+  const recovery = recoveryFor(trivy, { status: 'READY' }, { state: 'MISSING' });
+  assert.deepEqual(recovery, {
+    type: 'VCG_COMMAND',
+    action: 'refresh-data',
+    command: 'vibe-code-guard tools refresh-data trivy',
+    requiresExplicitConfirmation: true,
+    blocking: true,
+    reason: 'Trivy content is missing; the related checks are not ready.',
+  });
+});
+
+test('unverifiable ZAP readiness exposes manual review without inventing recovery', () => {
+  const zap = loadManifest().tools.find((item) => item.id === 'zap');
+  const recovery = recoveryFor(zap, { status: 'DEGRADED' }, { state: 'UNKNOWN' });
+  assert.equal(recovery.type, 'MANUAL_REVIEW');
+  assert.equal(recovery.command, 'vibe-code-guard doctor --json');
+  assert.equal(recovery.requiresExplicitConfirmation, false);
+  assert.equal(recovery.blocking, false);
+});
+
+test('successful content recovery promotes usable Trivy metadata and failed recovery stays non-ready', async () => {
+  const toolkitHome = tempDir('vcg-content-recovery-');
+  const cache = tempDir('vcg-content-recovery-cache-');
+  const previous = process.env.TRIVY_CACHE_DIR;
+  process.env.TRIVY_CACHE_DIR = cache;
+  const now = () => new Date('2026-08-12T01:00:00.000Z').getTime();
+  try {
+    const writeMetadata = () => {
+      fs.mkdirSync(path.join(cache, 'db'), { recursive: true });
+      fs.writeFileSync(path.join(cache, 'db', 'metadata.json'), JSON.stringify({ Version: 2, UpdatedAt: '2026-08-12T00:00:00.000Z', NextUpdate: '2026-08-13T00:00:00.000Z' }));
+      return { code: 0, output: '' };
+    };
+    const refreshed = await refreshContent('trivy', {
+      toolkitHome,
+      dryRun: false,
+      yes: true,
+      securityReviewed: true,
+      inspect: async (tool) => readyInspection(tool),
+      runCommand: async () => writeMetadata(),
+      now,
+    });
+    assert.equal(refreshed.state, 'REFRESHED');
+    assert.equal(refreshed.content.state, 'CURRENT');
+
+    fs.rmSync(path.join(cache, 'db'), { recursive: true, force: true });
+    const failed = await refreshContent('trivy', {
+      toolkitHome,
+      dryRun: false,
+      yes: true,
+      securityReviewed: true,
+      inspect: async (tool) => readyInspection(tool),
+      runCommand: async () => ({ code: 1, output: 'synthetic refresh failure' }),
+      now,
+    });
+    assert.equal(failed.state, 'DEGRADED');
+    assert.notEqual(failed.content.state, 'CURRENT');
+  } finally {
+    if (previous === undefined) delete process.env.TRIVY_CACHE_DIR;
+    else process.env.TRIVY_CACHE_DIR = previous;
+    fs.rmSync(toolkitHome, { recursive: true, force: true });
     fs.rmSync(cache, { recursive: true, force: true });
   }
 });

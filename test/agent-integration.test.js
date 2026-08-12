@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process');
 const test = require('node:test');
 
 const { ROOT, installLocalEntrypoints, uninstallLocalEntrypoints, loadManifest, installPlan, inspectTool } = require('../core/agent/toolchain');
+const { recoveryFor } = require('../core/agent/tool-lifecycle');
 const { validateConfig, validateRuntimeTarget } = require('../core/agent/project-config');
 
 function tempDir(prefix) {
@@ -123,6 +124,22 @@ test('fresh-machine planner handles missing tools, missing installers, degraded 
   assert.match(result.notes.join('\n'), /pipx is unavailable/);
   assert.equal(result.inspected.gitleaks.status, 'READY');
   assert.equal(result.inspected.gitleaks.version, '99.0.0');
+});
+
+test('required content readiness is distinct from installed VCG launchers', () => {
+  const trivy = loadManifest().tools.find((tool) => tool.id === 'trivy');
+  const recovery = recoveryFor(trivy, { status: 'READY' }, { state: 'MISSING' });
+  assert.equal(recovery.blocking, true);
+  assert.equal(recovery.requiresExplicitConfirmation, true);
+  assert.match(recovery.command, /^vibe-code-guard tools refresh-data trivy$/);
+});
+
+test('audit readiness can block missing required content without mutating the toolkit', () => {
+  const trivy = loadManifest().tools.find((tool) => tool.id === 'trivy');
+  const recovery = recoveryFor(trivy, { status: 'READY' }, { state: 'MISSING' });
+  assert.equal(recovery.blocking, true);
+  assert.equal(recovery.type, 'VCG_COMMAND');
+  assert.equal(recovery.requiresExplicitConfirmation, true);
 });
 
 test('non-default tool paths are resolved without shell execution', async () => {

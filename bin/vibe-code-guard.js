@@ -68,6 +68,12 @@ function emit(payload, human) {
 function humanDoctor(result) {
   const lines = [`Vibe Code Guard ${result.version}`, `Overall: ${result.status}`, '', 'Security toolchain:'];
   for (const tool of Object.values(result.toolchain)) lines.push(`- ${tool.displayName}: ${tool.status}${tool.version ? ` — ${tool.version}` : ''}${tool.reason ? ` — ${tool.reason}` : ''}`);
+  if (result.lifecycle?.tools) {
+    for (const tool of Object.values(result.lifecycle.tools)) {
+      const recovery = tool.readiness?.recovery;
+      if (recovery) lines.push(`  ${tool.displayName} content/readiness: ${tool.content.state} — ${recovery.reason}`, `  Recovery: ${recovery.command}${recovery.requiresExplicitConfirmation ? ' (explicit confirmation required)' : ''}`);
+    }
+  }
   lines.push('', `Dashboard: ${result.dashboard.status} (${result.dashboard.host} only)`, `Workflow: ${result.workflowVersion}`);
   if (result.wrapper?.status === 'DEGRADED') lines.push('Note: the global security-tools wrapper reported a degraded external dependency.');
   return lines.join('\n');
@@ -76,7 +82,8 @@ function humanDoctor(result) {
 async function commandDoctor(options) {
   const result = await doctor();
   try { result.lifecycle = await lifecycleStatus(); } catch (error) { result.lifecycle = { overall: 'DEGRADED', error: error.message }; }
-  if (result.status === 'READY' && result.lifecycle.overall === 'DEGRADED') result.status = 'DEGRADED';
+  if (result.lifecycle.overall === 'BROKEN') result.status = 'BROKEN';
+  else if (result.status === 'READY' && result.lifecycle.overall === 'DEGRADED') result.status = 'DEGRADED';
   return emit({ json: options.json, data: result, code: result.status === 'BROKEN' ? 1 : result.status === 'DEGRADED' ? 2 : 0 }, humanDoctor(result));
 }
 
@@ -97,10 +104,15 @@ async function commandInstall(options) {
   let localInstall = null;
   try { localInstall = installLocalEntrypoints(); } catch (error) { failures.push({ id: 'vibe-code-guard', reason: error.message }); }
   const health = await doctor();
+  try { health.lifecycle = await lifecycleStatus(); } catch (error) { health.lifecycle = { overall: 'DEGRADED', error: error.message }; }
+  if (health.lifecycle.overall === 'BROKEN') health.status = 'BROKEN';
+  else if (health.status === 'READY' && health.lifecycle.overall === 'DEGRADED') health.status = 'DEGRADED';
   const selfTest = await toolkitSelfTest();
-  const status = failures.length || health.status === 'BROKEN' ? 'FAILED' : health.status === 'DEGRADED' || selfTest.overall === 'DEGRADED' ? 'DEGRADED' : 'READY';
-  const result = { status, plan, executed, failures, localEntrypoints: localInstall, doctor: health, selfTest: summarizeSelfTest(selfTest) };
-  return emit({ json: options.json, data: result, code: status === 'FAILED' ? 1 : status === 'DEGRADED' ? 2 : 0 }, renderInstall(result));
+  const installationStatus = failures.length || !localInstall ? 'INSTALL_FAILED' : 'INSTALLED';
+  const readinessStatus = health.status === 'BROKEN' || selfTest.overall === 'FAIL' ? 'ACTION_REQUIRED' : health.status === 'DEGRADED' || selfTest.overall === 'DEGRADED' ? 'DEGRADED' : 'READY';
+  const status = installationStatus === 'INSTALL_FAILED' ? 'INSTALL_FAILED' : readinessStatus === 'READY' ? 'INSTALLED_READY' : 'INSTALLED_WITH_ACTION_REQUIRED';
+  const result = { status, installationStatus, readinessStatus, plan, executed, failures, localEntrypoints: localInstall, doctor: health, selfTest: summarizeSelfTest(selfTest) };
+  return emit({ json: options.json, data: result, code: installationStatus === 'INSTALL_FAILED' ? 1 : 0 }, renderInstall(result));
 }
 
 function renderInstall(data) {
@@ -115,7 +127,12 @@ function renderInstall(data) {
     lines.push(`Vibe Code Guard entrypoint directory: ${data.localEntrypoints.pathHint}`, 'The installer did not modify shell startup files; use the absolute launcher path or add this directory to PATH explicitly.');
   }
   if (data.nextAction) lines.push(data.nextAction);
-  if (data.doctor) lines.push(`Doctor: ${data.doctor.status}`, `Self-test: ${data.selfTest?.overall || 'UNKNOWN'}`);
+  if (data.installationStatus) lines.push(`Installation: ${data.installationStatus}`, `Security tool readiness: ${data.readinessStatus || 'UNKNOWN'}`);
+  if (data.doctor) {
+    lines.push(`Doctor: ${data.doctor.status}`, `Self-test: ${data.selfTest?.overall || 'UNKNOWN'}`);
+    const recoveryTools = Object.values(data.doctor.lifecycle?.tools || {}).filter((tool) => tool.readiness?.recovery);
+    for (const tool of recoveryTools) lines.push(`Next for ${tool.displayName}: ${tool.readiness.recovery.command}`);
+  }
   return lines.join('\n');
 }
 
@@ -171,9 +188,13 @@ async function commandAudit(options) {
     return emit({ json: options.json, data, code: 0 }, `Audit plan for ${projectPath}\nProfile: ${profile}\n${plan.explanation.join('\n')}`);
   }
   const health = await doctor();
-  if (health.status === 'BROKEN') {
-    const data = { status: 'BLOCKED', profile, project: projectPath, reason: 'Vibe Code Guard toolchain is BROKEN; no scan was started.', doctor: health, dashboardUrl: dashboardState()?.dashboardUrl || null };
-    return emit({ json: options.json, data, code: 1 }, 'Audit blocked: the Vibe Code Guard toolchain is BROKEN. Run vibe-code-guard doctor.');
+  try { health.lifecycle = await lifecycleStatus(); } catch (error) { health.lifecycle = { overall: 'DEGRADED', error: error.message }; }
+  if (health.status === 'BROKEN' || health.lifecycle.overall === 'BROKEN') {
+    const reason = health.lifecycle.overall === 'BROKEN'
+      ? 'Vibe Code Guard security tool content/runtime readiness is BROKEN; no scan was started.'
+      : 'Vibe Code Guard toolchain is BROKEN; no scan was started.';
+    const data = { status: 'BLOCKED', profile, project: projectPath, reason, doctor: health, dashboardUrl: dashboardState()?.dashboardUrl || null };
+    return emit({ json: options.json, data, code: 1 }, `Audit blocked: ${reason} Run vibe-code-guard doctor and follow any recovery action.`);
   }
   const { createRun, runAudit } = require('../server');
   const run = createRun({ projectPath, mode, webTarget });
