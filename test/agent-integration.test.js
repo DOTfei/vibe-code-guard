@@ -6,6 +6,7 @@ const { execFileSync } = require('node:child_process');
 const test = require('node:test');
 
 const { ROOT, installLocalEntrypoints, uninstallLocalEntrypoints, loadManifest, installPlan, inspectTool } = require('../core/agent/toolchain');
+const { recoveryFor } = require('../core/agent/tool-lifecycle');
 const { validateConfig, validateRuntimeTarget } = require('../core/agent/project-config');
 
 function tempDir(prefix) {
@@ -123,6 +124,50 @@ test('fresh-machine planner handles missing tools, missing installers, degraded 
   assert.match(result.notes.join('\n'), /pipx is unavailable/);
   assert.equal(result.inspected.gitleaks.status, 'READY');
   assert.equal(result.inspected.gitleaks.version, '99.0.0');
+});
+
+test('missing tools expose fixed official install metadata and require authorization', async () => {
+  const manifest = loadManifest();
+  const missing = new Set(['semgrep', 'checkov']);
+  const result = await installPlan({
+    inspect: async (tool) => missing.has(tool.id) ? { id: tool.id, displayName: tool.displayName, status: 'NOT_INSTALLED', binaryPath: null } : { id: tool.id, displayName: tool.displayName, status: 'READY', binaryPath: `/opt/homebrew/bin/${tool.id}`, version: '1.0.0', versionNumber: '1.0.0' },
+    commandExistsFn: async (command) => ['brew', 'pipx', 'python3'].includes(command),
+    resolveRelease: async (tool) => ({ latestStableVersion: tool.id === 'semgrep' ? '1.200.0' : '3.4.0', state: 'CHECKED', releaseUrl: `https://github.com/${tool.upstream.officialRepository.split('github.com/')[1]}/releases/tag/v1.0.0` }),
+  });
+  assert.deepEqual(result.missingTools, ['semgrep', 'checkov']);
+  assert.equal(result.authorizationRequired, true);
+  assert.ok(result.installPlan.every((item) => item.sourceType === 'OFFICIAL_UPSTREAM'));
+  assert.ok(result.installPlan.every((item) => item.versionPolicy === 'LATEST_STABLE_COMPATIBLE'));
+  assert.ok(result.installPlan.every((item) => item.requiresAuthorization === true));
+  assert.ok(result.actions.every((action) => action.sourceType === 'OFFICIAL_UPSTREAM'));
+});
+
+test('unverified or incompatible official release does not generate an install action', async () => {
+  const manifest = loadManifest();
+  const result = await installPlan({
+    inspect: async (tool) => tool.id === 'trivy' ? { id: tool.id, displayName: tool.displayName, status: 'NOT_INSTALLED' } : { id: tool.id, displayName: tool.displayName, status: 'READY', version: '1.0.0', versionNumber: '1.0.0', binaryPath: `/opt/homebrew/bin/${tool.id}` },
+    commandExistsFn: async () => true,
+    resolveRelease: async (tool) => tool.id === 'trivy' ? { latestStableVersion: '0.49.0', state: 'CHECKED', releaseUrl: 'https://github.com/aquasecurity/trivy/releases/tag/v0.49.0' } : null,
+  });
+  const planned = result.installPlan.find((item) => item.tool === 'trivy');
+  assert.equal(planned.state, 'INCOMPATIBLE_OR_UNVALIDATED');
+  assert.equal(result.actions.some((action) => action.id === 'trivy'), false);
+});
+
+test('required content readiness is distinct from installed VCG launchers', () => {
+  const trivy = loadManifest().tools.find((tool) => tool.id === 'trivy');
+  const recovery = recoveryFor(trivy, { status: 'READY' }, { state: 'MISSING' });
+  assert.equal(recovery.blocking, true);
+  assert.equal(recovery.requiresExplicitConfirmation, true);
+  assert.match(recovery.command, /^vibe-code-guard tools refresh-data trivy$/);
+});
+
+test('audit readiness can block missing required content without mutating the toolkit', () => {
+  const trivy = loadManifest().tools.find((tool) => tool.id === 'trivy');
+  const recovery = recoveryFor(trivy, { status: 'READY' }, { state: 'MISSING' });
+  assert.equal(recovery.blocking, true);
+  assert.equal(recovery.type, 'VCG_COMMAND');
+  assert.equal(recovery.requiresExplicitConfirmation, true);
 });
 
 test('non-default tool paths are resolved without shell execution', async () => {

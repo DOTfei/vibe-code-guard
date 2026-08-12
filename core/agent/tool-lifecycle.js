@@ -301,6 +301,41 @@ function actionFor(tool, item, action = 'update') {
   return null;
 }
 
+function recoveryFor(tool, inspection, content) {
+  const command = `vibe-code-guard tools refresh-data ${tool.id}`;
+  if (content.state === 'MISSING') {
+    return {
+      type: 'VCG_COMMAND',
+      action: 'refresh-data',
+      command,
+      requiresExplicitConfirmation: true,
+      blocking: tool.required !== false,
+      reason: `${tool.displayName} content is missing; the related checks are not ready.`,
+    };
+  }
+  if (content.state === 'BROKEN') {
+    return {
+      type: 'VCG_COMMAND',
+      action: 'refresh-data',
+      command,
+      requiresExplicitConfirmation: true,
+      blocking: tool.required !== false,
+      reason: `${tool.displayName} content is unreadable or unsupported; refresh requires review.`,
+    };
+  }
+  if (inspection.status === 'DEGRADED' || ['UNKNOWN', 'PRESENT_FRESHNESS_UNKNOWN'].includes(content.state)) {
+    return {
+      type: 'MANUAL_REVIEW',
+      action: 'doctor',
+      command: 'vibe-code-guard doctor --json',
+      requiresExplicitConfirmation: false,
+      blocking: false,
+      reason: `${tool.displayName} readiness or freshness could not be verified in this environment.`,
+    };
+  }
+  return null;
+}
+
 function summarizeTool(tool, inspection, previous, latest, content, checkedAt) {
   const installed = inspection.versionNumber || null;
   const comparison = installed && latest.latestStableVersion ? compareVersions(latest.latestStableVersion, installed) : null;
@@ -313,6 +348,7 @@ function summarizeTool(tool, inspection, previous, latest, content, checkedAt) {
     : ['BROKEN', 'MISSING'].includes(content.state)
       ? 'BROKEN'
       : inspection.status === 'DEGRADED' ? 'DEGRADED' : 'READY';
+  const recovery = recoveryFor(tool, inspection, content);
   return {
     id: tool.id,
     displayName: tool.displayName,
@@ -331,6 +367,13 @@ function summarizeTool(tool, inspection, previous, latest, content, checkedAt) {
     source: latest.source || previous.source || 'UNKNOWN',
     releaseUrl: latest.releaseUrl || previous.releaseUrl || null,
     content,
+    readiness: {
+      binary: inspection.status === 'NOT_INSTALLED' ? 'NOT_INSTALLED' : inspection.status,
+      content: content.state,
+      state,
+      blocking: Boolean(recovery?.blocking),
+      recovery,
+    },
     lastUpdateAttempt: previous.lastUpdateAttempt || null,
     lastSuccessfulValidation: previous.lastSuccessfulValidation || null,
     selfTest: previous.selfTest || null,
@@ -488,6 +531,7 @@ module.exports = {
   provenanceFor,
   readState,
   refreshContent,
+  recoveryFor,
   statePath,
   updateTool,
   withToolLock,

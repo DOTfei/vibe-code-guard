@@ -32,6 +32,13 @@ The dry run detects OS, architecture, existing binaries, Homebrew/pipx
 availability, and conflicts. It prints the exact fixed installer actions. It
 does not modify the machine.
 
+For missing upstream tools, the JSON plan includes `missingTools`,
+`installPlan`, `sourceType: OFFICIAL_UPSTREAM`,
+`versionPolicy: LATEST_STABLE_COMPATIBLE`, compatibility metadata, and
+`requiresAuthorization: true`. VCG checks the fixed official release source;
+it does not trust search results or generate an action for an unverified or
+incompatible stable release.
+
 After reviewing the plan:
 
 ```bash
@@ -56,8 +63,19 @@ the installer does not edit shell startup files. An agent can invoke the
 returned absolute `vibe-code-guard` launcher directly, or a human can add that
 directory to PATH explicitly after reviewing it.
 
-If a supported installer is unavailable, the result is `DEGRADED` or
-`FAILED` with an explanation. It is never presented as ready.
+The result separates Vibe Code Guard installation from scanner readiness:
+
+- `INSTALLED_READY`: Vibe Code Guard launchers are installed and required
+  readiness checks pass;
+- `INSTALLED_WITH_ACTION_REQUIRED`: launchers are installed, but a required
+  scanner binary/content/runtime still needs preparation or review; and
+- `INSTALL_FAILED`: Vibe Code Guard-owned launcher installation itself failed.
+
+For action-required readiness, inspect `doctor --json` and follow the
+structured `lifecycle.tools[*].readiness.recovery` action. Content refresh is
+explicit, uses the existing official-source lifecycle checks, and is never
+performed silently. The installer does not claim the toolkit is ready merely
+because its launcher was created.
 
 ## Prerequisites and limits
 
@@ -114,6 +132,10 @@ The machine-readable contract uses:
   unavailable or stale;
 - `BROKEN`: a required binary or local dependency cannot execute; and
 - `NOT_INSTALLED`: a component is absent.
+
+These doctor states are separate from the install result states above. A
+present Trivy CLI with a missing database is an installed Vibe Code Guard with
+action-required readiness, not a missing Vibe Code Guard installation.
 
 ## Uninstall
 

@@ -115,6 +115,22 @@ local freshness value is not available. An expired but readable database is
 Supported external content with unknown freshness remains `DEGRADED` rather
 than making the overall lifecycle appear fully current.
 
+## First-run recovery
+
+The Vibe Code Guard launcher installation is separate from upstream scanner
+readiness. A present Trivy binary with no local database is reported with
+`content.state: MISSING` and a structured recovery action:
+
+```text
+vibe-code-guard tools refresh-data trivy
+```
+
+The command is a plan by default. Applying it requires explicit confirmation,
+the existing lifecycle lock, and the official-source trust review. Agents
+should explain the action, obtain authorization, run it, and re-run doctor.
+ZAP or network-backed readiness that cannot be verified remains degraded or
+manual-review-required; it is never silently promoted to ready.
+
 ## Offline behavior
 
 Audits and targeted rescans use installed scanners without requiring a
