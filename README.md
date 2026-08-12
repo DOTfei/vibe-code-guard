@@ -1,77 +1,72 @@
 # Vibe Code Guard
 
-**A local-first security workflow for Codex, Claude Code, Gemini CLI, and other AI coding agents.**
+**Public Beta**
 
-`v0.8.0-beta` · Public Beta packaging / Active Development · macOS Apple Silicon validated
+**A local security workflow for AI coding agents and vibe coders.**
 
-AI coding is fast. Security tooling is fragmented.
+AI coding is fast. Security tooling is fragmented. Vibe Code Guard helps
+Codex, Claude Code, and similar agents use independent open-source security
+tools as one understandable local workflow.
 
-Vibe Code Guard does not invent a new vulnerability scanning engine. It brings
-existing open-source security tools into one local, change-aware pipeline and
-Dashboard.
+The scanners find the problems. Vibe Code Guard coordinates the workflow,
+organizes the findings, and shows the result in a local Dashboard.
 
-**The scanners find the problems. Vibe Code Guard makes the security workflow
-usable.**
+## Quick Start
 
-<p align="center">
-  <img src="diagrams/vibe-code-guard-explainer-next-ai-drawio.svg" alt="Vibe Code Guard explainer: upstream open-source scanning engines feed a local change-aware pipeline, unified evidence, fix and rescan status, history, Dashboard, and release gate" width="1100" />
-</p>
-
-Static fallback: [view the PNG export](diagrams/vibe-code-guard-explainer-next-ai-drawio.png).
-
-## The first-use experience
-
-Vibe Code Guard is for people who build with Codex, Claude Code, Gemini CLI,
-Cursor agents, or similar coding agents and want a local security workflow
-without learning eight scanner command lines.
-
-Give your coding agent this repository and say:
+Give your coding agent this repository and paste:
 
 ```text
-Install Vibe Code Guard from https://github.com/DOTfei/vibe-code-guard
+Install Vibe Code Guard from
+https://github.com/DOTfei/vibe-code-guard
 and security audit this project.
 ```
 
-The agent should safely plan installation, check the local toolchain, discover
-the project, select relevant checks, run the audit, read the structured result,
-and show the local Dashboard. The scanners remain independently installed
-upstream tools; Vibe Code Guard supplies the safe workflow around them.
+The agent can install or check Vibe Code Guard, choose the relevant checks,
+run the audit, explain the result, and open the Dashboard. You do not need to
+learn each scanner's command line.
 
-The launcher installation and scanner readiness are reported separately. If a
-first-run database or runtime component is missing, the agent will show an
-action-required recovery command, ask before refreshing external scanner
-content, re-run doctor, and only then continue the audit. It never fakes a
-database or silently updates scanners.
+![Vibe Code Guard Dashboard overview showing the release decision, important findings, verification state, and security coverage](docs/assets/dashboard-overview.png)
 
-If an upstream scanner is missing, Vibe Code Guard supplies the official-source
-install plan and compatibility policy. Your coding agent explains the planned
-machine change and asks for authorization. It does not search GitHub, guess a
-repository, or invent an installation command.
+_The overview brings the release decision, important findings, verification
+state, and security coverage together._
 
-If the audit finds a release-blocking issue, the next user prompt can be:
+## Basic flow
 
 ```text
-Fix the current release-blocking security issues. Ask before changing code,
-then run targeted verification and report the final release status.
+You
+↓
+Codex / Claude Code
+↓
+Vibe Code Guard
+↓
+Independent security scanners
+↓
+Findings
+↓
+Authorized fix
+↓
+Targeted verification
+↓
+Release decision
+↓
+Dashboard
 ```
 
-Agents use CLI/JSON as the machine interface. Humans use the Dashboard as the
-visual interface. Both read the same persisted findings, lifecycle,
-verification, scanner state, and release gate.
+Humans use the Dashboard. Coding agents use the CLI and JSON output. Both read
+the same findings, lifecycle, verification, scanner status, and release gate.
+
+## Public Beta limitations
+
+Vibe Code Guard does not guarantee that software is secure or that every issue
+will be detected. Runtime scanners require an authorized localhost, local
+Docker, or explicitly authorized test target. External scanner databases,
+rules, templates, and add-ons may be unavailable or degraded. A clean result
+is not a security guarantee.
 
 See [`AGENTS.md`](AGENTS.md) and
 [`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
-agent workflow and JSON contracts.
-
-v0.8 packages a clearer first-screen Dashboard and public-beta onboarding. It
-keeps the v0.7 safe real-workflow validation harness using temporary projects and
-mock scanner executables. It exercises the same agent-facing install, doctor,
-audit, correlation, Dashboard, fix, targeted verification, and release-gate
-paths without changing the host toolchain or contacting public targets. See
-[`docs/public-beta-readiness.md`](docs/public-beta-readiness.md) and the
-[`v0.7 friction log`](docs/e2e-friction-log.md) for the tested boundary and
-known limitations. Maintainers can use the [safe public-beta demo](docs/public-beta-demo.md)
-to review the Dashboard states without public targets or real credentials.
+agent workflow and JSON contracts. The [Public Beta demo](docs/public-beta-demo.md)
+uses safe temporary projects and mock scanners.
 
 ## What this project is
 
@@ -224,6 +219,26 @@ run a targeted rescan and report `VERIFIED`, `STILL_DETECTED`, or
 Finding Schema documentation](docs/unified-finding-schema.md) and [correlation
 and lifecycle documentation](docs/correlation-and-lifecycle.md) for the field
 contracts and compatibility rules.
+
+**`FIXED` is not `VERIFIED`.** `FIXED` records an authorized code change. Vibe
+Code Guard only reports `VERIFIED` after the relevant scanner coverage runs
+again successfully and the finding is no longer detected. If the scanner is
+skipped, fails, or coverage is incomplete, the result stays incomplete.
+
+![Vibe Code Guard Dashboard findings view showing correlated issues, scanner evidence, and verification status](docs/assets/dashboard-findings.png)
+
+_The Findings view keeps the correlated issue and the independent scanner
+observations visible together._
+
+![Vibe Code Guard Dashboard toolkit health view showing scanner and content readiness](docs/assets/dashboard-toolkit-health.png)
+
+_Toolkit health keeps scanner readiness, freshness, and degraded states visible
+instead of hiding them behind a green result._
+
+![Vibe Code Guard Dashboard history view showing append-only scan history and release results](docs/assets/dashboard-history.png)
+
+_History keeps previous runs available so a fix and its later verification can
+be reviewed as part of the same local record._
 
 The Dashboard is local-only by default. It binds to `127.0.0.1`, does not
 require an account or cloud database, and does not upload source code or scan
