@@ -8,6 +8,7 @@ const test = require('node:test');
 const { ROOT, installLocalEntrypoints, uninstallLocalEntrypoints, loadManifest, installPlan, inspectTool } = require('../core/agent/toolchain');
 const { recoveryFor } = require('../core/agent/tool-lifecycle');
 const { validateConfig, validateRuntimeTarget } = require('../core/agent/project-config');
+const { buildExecutionPlan } = require('../orchestrator');
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -168,6 +169,12 @@ test('audit readiness can block missing required content without mutating the to
   assert.equal(recovery.blocking, true);
   assert.equal(recovery.type, 'VCG_COMMAND');
   assert.equal(recovery.requiresExplicitConfirmation, true);
+});
+
+test('non-runtime project plans mark ZAP and Nuclei not applicable', () => {
+  const plan = buildExecutionPlan({ projectPath: path.join(ROOT, 'test/e2e/fixtures/node-api') });
+  assert.equal(plan.tools.find((item) => item.tool === 'zap').decision, 'NOT_APPLICABLE');
+  assert.equal(plan.tools.find((item) => item.tool === 'nuclei').decision, 'NOT_APPLICABLE');
 });
 
 test('non-default tool paths are resolved without shell execution', async () => {
