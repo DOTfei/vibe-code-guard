@@ -2,14 +2,24 @@
 
 **Public Beta**
 
-**A local security workflow for AI coding agents and vibe coders.**
+### Security workflow for AI coding agents and vibe coders
 
-AI coding is fast. Security tooling is fragmented. Vibe Code Guard helps
-Codex, Claude Code, and similar agents use independent open-source security
-tools as one understandable local workflow.
+AI can write an app in minutes. But when Codex, Claude Code, Cursor, or
+another coding agent changes authentication, dependencies, APIs, secrets,
+Docker configuration, or infrastructure, one practical question remains:
 
-The scanners find the problems. Vibe Code Guard coordinates the workflow,
-organizes the findings, and shows the result in a local Dashboard.
+> **Which security checks should run, and is the result complete enough to review?**
+
+Vibe Code Guard turns independently installed open-source scanners into one
+local workflow that coding agents can understand and normal users can follow.
+
+**AI writes the code. Vibe Code Guard makes sure the security workflow does
+not get skipped.**
+
+The scanners provide detection engines. Vibe Code Guard provides the layer
+around them: project-aware selection, normalized findings, correlation,
+lifecycle, targeted verification, coverage awareness, release decisions, and
+human-facing Dashboard plus machine-readable CLI/JSON output.
 
 ## Quick Start
 
@@ -23,7 +33,10 @@ and security audit this project.
 
 The agent can install or check Vibe Code Guard, choose the relevant checks,
 run the audit, explain the result, and open the Dashboard. You do not need to
-learn each scanner's command line.
+learn when to run Semgrep, Trivy, Gitleaks, Checkov, or the other supported
+tools. If a required scanner is missing, Vibe Code Guard provides a fixed
+official-source installation plan; the coding agent must obtain authorization
+before installing a third-party tool.
 
 ![Vibe Code Guard Dashboard overview showing the release decision, important findings, verification state, and security coverage](docs/assets/dashboard-overview.png)
 
@@ -56,116 +69,126 @@ the same findings, lifecycle, verification, scanner status, and release gate.
 | **Vibe Code Guard** | Select relevant checks, orchestrate the workflow, correlate findings, track verification, and calculate the release gate. |
 | **Upstream scanners** | Provide the actual detection engines for secrets, code, dependencies, IaC, and authorized runtime checks. |
 
-## Public Beta limitations
+## Why Vibe Code Guard exists
 
-Vibe Code Guard does not guarantee that software is secure or that every issue
-will be detected. Runtime scanners require an authorized localhost, local
-Docker, or explicitly authorized test target. External scanner databases,
-rules, templates, and add-ons may be unavailable or degraded. A clean result
-is not a security guarantee.
+Vibe coding makes software creation faster, but it also leaves many developers
+with questions they should not have to answer by memorizing eight security
+tools:
 
-See [`AGENTS.md`](AGENTS.md) and
-[`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
-agent workflow and JSON contracts. The [Public Beta demo](docs/public-beta-demo.md)
-uses safe temporary projects and mock scanners.
+- Did the AI-generated change introduce a security problem?
+- Which scanner fits this change?
+- Did several scanners report the same underlying issue?
+- Did an AI-claimed fix actually work?
+- Did a scanner fail, or was it simply not applicable?
+- Does incomplete coverage change the release decision?
 
-## What this project is
+Vibe Code Guard turns those questions into a visible, repeatable workflow.
 
-Vibe Code Guard combines the capabilities of established open-source security
-tools into one understandable local workflow for AI-generated and
-“vibe-coded” projects.
-
-It is not a new scanner and it does not replace the upstream projects. It is
-the layer around them that understands project context, coordinates the checks,
-normalizes scanner results into one Unified Finding Schema, and brings findings,
-execution state, run history, and the local Dashboard into one workflow.
-Cross-tool correlation, persistent finding lifecycle, targeted verification,
-and upstream tool lifecycle planning are now included:
-
-1. understands what changed in a repository;
-2. classifies the change and applies safe scanning policies;
-3. selects the relevant checks instead of blindly running everything every time;
-4. executes independently installed upstream tools;
-5. collects execution evidence, findings, and skip reasons; and
-6. presents the result in a local Dashboard with history and a conservative
-   release-gate summary; and
-7. stores scanner-independent Unified Findings for the CLI, Dashboard, reports,
-   and a project-level correlation and lifecycle index;
-8. verifies an authorized external-agent fix with only the relevant scanners;
-9. keeps scanner engine updates separate from databases, rules, templates, and
-   add-ons, with official-source checks and explicit one-tool update plans.
-
-The goal is simple: install the security toolkit once, then use the same
-repeatable security workflow in every AI-assisted coding repository.
-
-## Who does what
-
-| | Responsibility |
+| Developer problem | Vibe Code Guard response |
 | --- | --- |
-| **Upstream open-source tools** | Detect vulnerabilities, secrets, insecure code, dependency issues, infrastructure misconfigurations, and authorized web/runtime signals. They provide the actual scanning engines. |
-| **Vibe Code Guard** | Understands project and change context; decides which scanners are relevant; orchestrates the pipeline; normalizes results into the v1 Unified Finding Schema; correlates compatible evidence; tracks explicit fix and verification lifecycle; performs targeted verification without editing code; records execution state and run history; presents the local Dashboard and reports; and provides a conservative release gate. |
+| “I do not know which security tool to run.” | Project- and change-aware scanner selection |
+| “Eight tools return eight different formats.” | Unified Findings |
+| “Several scanners reported the same issue.” | Cross-tool correlation and deduplication |
+| “My coding agent says it fixed the bug.” | Targeted verification with relevant scanner coverage |
+| “A failed scanner looks like zero findings.” | Explicit coverage, skipped, degraded, and failed states |
+| “Can I release this?” | Conservative release gate and clear release state |
+| “I cannot interpret raw scanner output.” | Human Dashboard plus CLI/JSON for agents |
 
-Vibe Code Guard does not claim the upstream detection engines as its own work.
-The individual tools remain responsible for their own scanning behavior and
-licenses. Their versions, releases, rules, databases, templates, and add-ons
-come from the respective upstream projects; Vibe Code Guard does not own or
-guarantee those artifacts and only validates local compatibility and
-known-good state where supported.
+## More than a scanner launcher
 
-## The problem we solve
+The eight scanners are important, but they are not the product by themselves.
+Vibe Code Guard adds the workflow that makes specialized tools usable together:
 
-AI-assisted development makes it easy to create features quickly, but it also
-creates a practical security gap:
+1. **Project-aware selection** — chooses relevant checks from the stack, files,
+   project type, profile, and runtime-target applicability.
+2. **Unified Findings** — normalizes different scanner formats into one common
+   finding model with stable evidence and fingerprints.
+3. **Correlation** — groups compatible observations of the same underlying
+   issue instead of making duplicate alerts look like separate vulnerabilities.
+4. **Lifecycle** — records `OPEN`, `FIXING`, `FIXED`, `VERIFIED`, `REOPENED`,
+   `FALSE_POSITIVE`, and `ACCEPTED_RISK` explicitly.
+5. **Targeted verification** — reruns the relevant checks after an authorized
+   fix instead of treating a code edit as proof.
+6. **Coverage awareness** — keeps skipped, failed, degraded, and not-applicable
+   checks visible; they are not silently converted into clean results.
+7. **Release decision** — summarizes the canonical state as `SAFE TO DEPLOY`,
+   `DO NOT DEPLOY`, `REVIEW REQUIRED`, or `INCOMPLETE SECURITY COVERAGE`.
 
-- **Security tools are fragmented.** Each scanner has its own installation,
-  command syntax, output format, database, rules, and update process.
-- **Developers do not know which check fits the change.** A dependency change,
-  API change, secret leak, Dockerfile, and web application need different kinds
-  of review.
-- **Running every scanner on every edit is slow.** Running none of them leaves
-  blind spots.
-- **Raw findings are difficult to act on.** A list of tool-specific alerts does
-  not clearly show what ran, what was skipped, what matters, or whether a fix
-  actually remained fixed.
-- **Active testing needs a boundary.** Web scanners and agentic testing tools
-  must not accidentally target third-party systems.
-- **Toolchain health is easy to forget.** An outdated binary, missing database,
-  broken rule set, or failed self-test can make a security workflow look more
-  complete than it really is.
+Humans use the Dashboard. Coding agents use CLI/JSON. Both consume the same
+canonical findings, lifecycle, verification, scanner status, and release gate.
 
-Vibe Code Guard turns those separate concerns into one visible, local, and
-repeatable security path.
+## Eight independent security tools, one workflow
 
-## What we built
+These are the eight supported Public Beta scanner integrations. Vibe Code Guard
+does not run every scanner on every project; it selects tools based on project
+applicability and audit profile.
 
-### 1. A curated open-source security toolkit
-
-The core toolkit covers several independent detection layers:
-
-| Security layer | Open-source tool | What it contributes | License |
+| Tool | Security role | When VCG may use it | Upstream license |
 | --- | --- | --- | --- |
-| Secrets | [Gitleaks](https://github.com/gitleaks/gitleaks) | Detects likely secrets in source and Git history | [MIT](https://raw.githubusercontent.com/gitleaks/gitleaks/master/LICENSE) |
-| Secrets | [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Searches for credentials and verifies exposed secrets where supported | [GNU AGPL v3 — see upstream LICENSE](https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE) |
-| Static analysis | [Semgrep](https://github.com/semgrep/semgrep) | Finds insecure code patterns using configurable rules | [LGPL-2.1](https://raw.githubusercontent.com/semgrep/semgrep/develop/LICENSE) |
-| Vulnerabilities and config | [Trivy](https://github.com/aquasecurity/trivy) | Scans dependencies, filesystems, containers, secrets, and configuration | [Apache-2.0](https://raw.githubusercontent.com/aquasecurity/trivy/main/LICENSE) |
-| Dependencies | [OSV-Scanner](https://github.com/google/osv-scanner) | Matches supported dependency manifests and lockfiles to OSV vulnerabilities | [Apache-2.0](https://raw.githubusercontent.com/google/osv-scanner/main/LICENSE) |
-| Infrastructure as code | [Checkov](https://github.com/bridgecrewio/checkov) | Checks Terraform, Dockerfiles, Kubernetes, and other IaC policies | [Apache-2.0](https://raw.githubusercontent.com/bridgecrewio/checkov/main/LICENSE) |
-| Authorized web testing | [OWASP ZAP](https://github.com/zaproxy/zaproxy) | Dynamic web application testing for authorized local/test targets | [Apache-2.0](https://raw.githubusercontent.com/zaproxy/zaproxy/main/LICENSE) |
-| Authorized template detection | [Nuclei](https://github.com/projectdiscovery/nuclei) | Template-driven detection against explicitly authorized targets | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei/main/LICENSE.md) |
-| Detection content | [Nuclei Templates](https://github.com/projectdiscovery/nuclei-templates) | Community-curated detection content used by Nuclei | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei-templates/main/LICENSE.md) |
-| Optional agentic testing | [Strix](https://github.com/usestrix/strix) | Explicitly authorized deep testing and exploit validation | [Apache-2.0](https://raw.githubusercontent.com/usestrix/strix/main/LICENSE) |
+| [Gitleaks](https://github.com/gitleaks/gitleaks) | Secret detection | Secret-sensitive changes and routine secret checks | [MIT](https://raw.githubusercontent.com/gitleaks/gitleaks/master/LICENSE) |
+| [TruffleHog](https://github.com/trufflesecurity/trufflehog) | Secret discovery and verification where supported | Higher-risk secret checks and targeted verification | [GNU AGPL v3 — upstream LICENSE](https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/LICENSE) |
+| [Semgrep](https://github.com/semgrep/semgrep) | Static analysis | Source-code and policy-relevant changes | [LGPL-2.1](https://raw.githubusercontent.com/semgrep/semgrep/develop/LICENSE) |
+| [Trivy](https://github.com/aquasecurity/trivy) | Dependencies, containers, configuration, and vulnerability data | Dependency, container, or configuration changes | [Apache-2.0](https://raw.githubusercontent.com/aquasecurity/trivy/main/LICENSE) |
+| [OSV-Scanner](https://github.com/google/osv-scanner) | Dependency vulnerability intelligence | Supported manifest and lockfile changes | [Apache-2.0](https://raw.githubusercontent.com/google/osv-scanner/main/LICENSE) |
+| [Checkov](https://github.com/bridgecrewio/checkov) | Infrastructure-as-code and configuration policy | Terraform, Dockerfile, Kubernetes, and related IaC changes | [Apache-2.0](https://raw.githubusercontent.com/bridgecrewio/checkov/main/LICENSE) |
+| [OWASP ZAP](https://github.com/zaproxy/zaproxy) | Authorized dynamic web testing | Only when runtime scanning is required and scope is authorized | [Apache-2.0](https://raw.githubusercontent.com/zaproxy/zaproxy/main/LICENSE) |
+| [Nuclei](https://github.com/projectdiscovery/nuclei) | Authorized template-based runtime detection | Only for an authorized localhost, local Docker, or test target | [MIT](https://raw.githubusercontent.com/projectdiscovery/nuclei/main/LICENSE.md) |
 
-Strix is not part of the deterministic eight-tool core health gate and is
-never invoked implicitly by `quick` or `full`.
+**Nuclei Templates are detection content, not a ninth scanner.** They are a
+separate upstream repository with their own content and license lifecycle and
+must be sourced from trusted official channels.
 
-This is **composition at the workflow layer**, not a combined binary or a
-fork. The repository does not copy, bundle, modify, or redistribute the
-upstream scanners, their binaries, databases, rules, templates, or add-ons.
-They are independently installed and managed through their own official
-channels. This repository does not relicense them or claim them as its own
-work.
+**Strix is not part of the Public Beta core eight or the normal deterministic
+workflow.** Any optional or future agentic testing must remain explicitly
+authorized and separately reviewed; it is not counted in this table.
 
-### 2. A change-aware security pipeline
+## Third-party tools and licenses
+
+Vibe Code Guard itself is licensed under Apache-2.0. The supported scanners
+remain independent third-party projects; their licenses are not replaced by
+the VCG license. VCG integrates with and invokes independently installed tools
+through supported interfaces. It does not bundle, copy, modify, relicense, or
+claim ownership of their upstream source code.
+
+VCG may provide compatibility checks and an official-source installation plan,
+but scanner versions and scanner update lifecycles remain separate from the
+VCG version. Rule packs, templates, vulnerability databases, plugins,
+add-ons, and other downloaded artifacts may have their own terms and must be
+reviewed separately.
+
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for detailed attribution
+and license records. Vibe Code Guard is not affiliated with or endorsed by the
+upstream projects unless explicitly stated otherwise.
+
+## Installation model
+
+VCG does not need to contain scanner source code to orchestrate scanner
+executables that are installed independently.
+
+```text
+Install Vibe Code Guard
+          ↓
+VCG doctor
+          ↓
+Check independent security tools
+          ↓
+   ┌──────────────────────┬──────────────────────┐
+   │ installed + compatible│ missing or degraded  │
+   │ reuse                  │ official install plan│
+   └──────────┬───────────┴──────────┬───────────┘
+              ↓                      ↓
+             reuse             user authorization
+                                     ↓
+                            independent installation
+              └──────────────┬───────────────┘
+                             ↓
+                            audit
+```
+
+The VCG version and scanner versions are separate. VCG maintains compatibility
+policy and lifecycle checks; it does not silently update third-party scanners.
+
+## How VCG runs the pipeline
 
 The pipeline separates everyday development checks from deeper pre-release
 review:
@@ -200,10 +223,29 @@ The intended operating pattern is:
 can be installed once globally, while the pipeline chooses a proportionate set
 of checks for the current change.
 
-### 3. A local security Dashboard
+## Findings, verification, and the Dashboard
 
-The Dashboard gives developers a visual audit trail instead of forcing them to
-read several unrelated terminal outputs. It shows:
+After an authorized fix, the lifecycle is explicit:
+
+```text
+OPEN
+  ↓
+Coding agent makes an authorized fix
+  ↓
+FIXED
+  ↓
+Relevant scanners run again
+  ↓
+VERIFIED
+```
+
+**`FIXED` is not `VERIFIED`.** A code change alone does not make a finding
+verified. If relevant scanner coverage is skipped, fails, degraded, out of
+scope, or incomplete, VCG reports `VERIFICATION_INCOMPLETE` rather than a
+false success. A finding can return as `REOPENED` or `STILL_DETECTED`.
+
+The Dashboard is the human-facing view of the same canonical security state
+consumed by coding agents through CLI/JSON. It shows:
 
 - which scanners actually ran;
 - installed tool and toolchain health;
@@ -220,11 +262,6 @@ run a targeted rescan and report `VERIFIED`, `STILL_DETECTED`, or
 Finding Schema documentation](docs/unified-finding-schema.md) and [correlation
 and lifecycle documentation](docs/correlation-and-lifecycle.md) for the field
 contracts and compatibility rules.
-
-**`FIXED` is not `VERIFIED`.** `FIXED` records an authorized code change. Vibe
-Code Guard only reports `VERIFIED` after the relevant scanner coverage runs
-again successfully and the finding is no longer detected. If the scanner is
-skipped, fails, or coverage is incomplete, the result stays incomplete.
 
 ![Vibe Code Guard Dashboard findings view showing correlated issues, scanner evidence, and verification status](docs/assets/dashboard-findings.png)
 
@@ -255,6 +292,20 @@ attention, whether a fix was actually verified, and whether scanner coverage
 is degraded. Technical scanner observations remain available in the Findings
 and Toolkit views. A clean result means no current release-blocking findings
 were detected by the checks that ran; it is not a security guarantee.
+
+## Public Beta limitations
+
+Vibe Code Guard does not guarantee that software is secure or that every issue
+will be detected. Runtime scanners require an authorized localhost, local
+Docker, or explicitly authorized test target. External scanner databases,
+rules, templates, and add-ons may be unavailable or degraded. A clean result
+means only that no current release-blocking findings were detected by the
+checks that completed; it is not a security guarantee or certification.
+
+See [`AGENTS.md`](AGENTS.md) and
+[`docs/agent-integration.md`](docs/agent-integration.md) for the canonical
+agent workflow and JSON contracts. The [Public Beta demo](docs/public-beta-demo.md)
+uses safe temporary projects and mock scanners.
 
 ## How to use it
 
@@ -366,16 +417,18 @@ External scanners may contact upstream services for vulnerability databases,
 rules, templates, or add-ons. Review their individual network behavior and
 terms for your environment.
 
-## Licensing, attribution, and third-party terms
+## Detailed licensing, attribution, and third-party terms
 
 The original orchestration, Dashboard, policy, test, and documentation code in
 this repository is licensed under the [Apache License 2.0](LICENSE).
 
 The scanners listed above remain separate works owned by their respective
 authors and organizations. Their licenses are **not** replaced by this
-repository's Apache-2.0 license. The current integration invokes independently
-installed tools through explicit adapters and allowlists; it does not link
-against or redistribute their code or binaries.
+repository's Apache-2.0 license. The current workflow invokes independently
+installed tools through explicit adapters and allowlists; it does not bundle or
+modify their upstream source code or binaries. This repository does contain its
+own adapters, configuration, synthetic test fixtures, and generated
+documentation assets; those are project artifacts, not upstream scanner source.
 
 The listed licenses apply to the upstream repositories themselves. Rule packs,
 templates, vulnerability databases, plugins, add-ons, model assets, and other
