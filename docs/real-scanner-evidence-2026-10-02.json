@@ -1,0 +1,949 @@
+{
+  "schemaVersion": "1.0",
+  "checkedAt": "2026-10-02T14:54:35.257Z",
+  "exitCode": 2,
+  "baseline": "Real execution evidence; not a security certification.",
+  "hostMonitoredFilesUnchanged": true,
+  "evidenceNote": "Compact sanitized capture. Outputs longer than 3000 characters are explicitly truncated with hashes; full traces remain in the temporary run directory.",
+  "inventory": {
+    "gitleaks": {
+      "binary": "/opt/homebrew/Cellar/gitleaks/8.30.1/bin/gitleaks",
+      "officialRepository": "https://github.com/gitleaks/gitleaks",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "8.30.1",
+      "command": {
+        "binary": "$VALIDATION/bin/gitleaks",
+        "args": [
+          "version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 662,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "8.30.1\n",
+        "stderr": ""
+      }
+    },
+    "trufflehog": {
+      "binary": "/opt/homebrew/bin/trufflehog",
+      "officialRepository": "https://github.com/trufflesecurity/trufflehog",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "3.97.0",
+      "command": {
+        "binary": "$VALIDATION/bin/trufflehog",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 1001,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "trufflehog 3.97.0\n",
+        "stderr": ""
+      }
+    },
+    "semgrep": {
+      "binary": "/opt/homebrew/Cellar/semgrep/1.172.0/libexec/bin/semgrep",
+      "officialRepository": "https://github.com/semgrep/semgrep",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "1.172.0",
+      "command": {
+        "binary": "$VALIDATION/bin/semgrep",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 1799,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "1.172.0\n",
+        "stderr": ""
+      }
+    },
+    "trivy": {
+      "binary": "/opt/homebrew/Cellar/trivy/0.73.0/bin/trivy",
+      "officialRepository": "https://github.com/aquasecurity/trivy",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "0.73.0",
+      "command": {
+        "binary": "$VALIDATION/bin/trivy",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 802,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "Version: 0.73.0\nVulnerability DB:\n  Version: 2\n  UpdatedAt: 2026-08-10 06:54:30.951906211 +0000 UTC\n  NextUpdate: 2026-08-11 06:54:30.95190594 +0000 UTC\n  DownloadedAt: 2026-08-10 08:52:54.147708 +0000 UTC\nCheck Bundle:\n  Digest: sha256:1583562f8b90ed2a071b99f0e5ffff6b57e4ceb6ca3e4796577b4e6a339eb74c\n  DownloadedAt: 2026-08-09 14:25:35.148712 +0000 UTC\n",
+        "stderr": ""
+      }
+    },
+    "osv-scanner": {
+      "binary": "/opt/homebrew/Cellar/osv-scanner/2.5.0/bin/osv-scanner",
+      "officialRepository": "https://github.com/google/osv-scanner",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "2.5.0",
+      "command": {
+        "binary": "$VALIDATION/bin/osv-scanner",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 634,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "osv-scanner version: 2.5.0\nosv-scalibr version: 0.4.5\ncommit: n/a\nbuilt at: n/a\n",
+        "stderr": ""
+      }
+    },
+    "checkov": {
+      "binary": "/opt/homebrew/Cellar/checkov/3.3.0_4/libexec/bin/checkov",
+      "officialRepository": "https://github.com/bridgecrewio/checkov",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "3.3.0",
+      "command": {
+        "binary": "$VALIDATION/bin/checkov",
+        "args": [
+          "--version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 17097,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "3.3.0\n",
+        "stderr": ""
+      }
+    },
+    "zap": {
+      "binary": "/Applications/ZAP.app/Contents/Java/zap.sh",
+      "officialRepository": "https://github.com/zaproxy/zaproxy",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "2.17.0",
+      "command": {
+        "binary": "$VALIDATION/bin/zap",
+        "args": [
+          "-version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 9251,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "Found Java version 17.0.17\nAvailable memory: 16384 MB\nUsing JVM args: -Xmx4096m\n2.17.0\n",
+        "stderr": ""
+      }
+    },
+    "nuclei": {
+      "binary": "/opt/homebrew/Cellar/nuclei/3.11.1/bin/nuclei",
+      "officialRepository": "https://github.com/projectdiscovery/nuclei",
+      "provenance": "Resolved installed path; no installation or release authentication performed.",
+      "version": "3.11.1",
+      "command": {
+        "binary": "$VALIDATION/bin/nuclei",
+        "args": [
+          "-version"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 771,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "",
+        "stderr": "[\u001b[34mINF\u001b[0m] Nuclei Engine Version: v3.11.1\n[\u001b[34mINF\u001b[0m] Nuclei Config Directory: $VALIDATION/home/Library/Application Support/nuclei\n[\u001b[34mINF\u001b[0m] Nuclei Cache Directory: $VALIDATION/home/Library/Caches/nuclei\n[\u001b[34mINF\u001b[0m] PDCP Directory: $VALIDATION/home/.pdcp\n"
+      }
+    }
+  },
+  "results": [
+    {
+      "id": "secret-workflow",
+      "status": "REAL_VALIDATED",
+      "reason": "Real audit, fix, targeted verification and negative cases completed.",
+      "failure": false,
+      "evidence": {
+        "status": "REAL_VALIDATED",
+        "initialRunId": "20261002145329-69a17a",
+        "findingId": "VCG-CORR-9D885B46F83C8D",
+        "initialVersions": {
+          "gitleaks": "8.30.1",
+          "trufflehog": "3.97.0",
+          "semgrep": "1.172.0",
+          "trivy": null,
+          "osv-scanner": null,
+          "checkov": null,
+          "zap": null,
+          "nuclei": null
+        },
+        "checks": [
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "gitleaks",
+              "trufflehog"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "PASSED",
+            "cliExitCode": 0,
+            "verification": "PASSED",
+            "lifecycle": "VERIFIED",
+            "relevantScanners": [
+              "gitleaks",
+              "trufflehog"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Targeted verification passed, but a complete release assessment is still required."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "gitleaks",
+              "trufflehog"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "gitleaks",
+              "trufflehog"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Scanner configuration, ignore scope, or the target file changed since the finding was recorded."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "gitleaks",
+              "trufflehog"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "One or more relevant scanners were skipped, failed, degraded, malformed, missing, or did not report a version."
+            },
+            "dashboardAgrees": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "static-workflow",
+      "status": "REAL_VALIDATED",
+      "reason": "Real audit, fix, targeted verification and negative cases completed.",
+      "failure": false,
+      "evidence": {
+        "status": "REAL_VALIDATED",
+        "initialRunId": "20261002145338-b1fc6d",
+        "findingId": "VCG-CORR-B3AED6AE3559FD",
+        "initialVersions": {
+          "gitleaks": "8.30.1",
+          "trufflehog": "3.97.0",
+          "semgrep": "1.172.0",
+          "trivy": null,
+          "osv-scanner": null,
+          "checkov": null,
+          "zap": null,
+          "nuclei": null
+        },
+        "checks": [
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "semgrep"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "PASSED",
+            "cliExitCode": 0,
+            "verification": "PASSED",
+            "lifecycle": "VERIFIED",
+            "relevantScanners": [
+              "semgrep"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Targeted verification passed, but a complete release assessment is still required."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "semgrep"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "semgrep"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Scanner configuration, ignore scope, or the target file changed since the finding was recorded."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "semgrep"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "One or more relevant scanners were skipped, failed, degraded, malformed, missing, or did not report a version."
+            },
+            "dashboardAgrees": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "container-workflow",
+      "status": "REAL_VALIDATED",
+      "reason": "Real audit, fix, targeted verification and negative cases completed.",
+      "failure": false,
+      "evidence": {
+        "status": "REAL_VALIDATED",
+        "initialRunId": "20261002145349-086369",
+        "findingId": "VCG-CORR-10DF7E6EEE4644",
+        "initialVersions": {
+          "gitleaks": "8.30.1",
+          "trufflehog": "3.97.0",
+          "semgrep": "1.172.0",
+          "trivy": "0.73.0",
+          "osv-scanner": "2.5.0",
+          "checkov": "3.3.0",
+          "zap": null,
+          "nuclei": null
+        },
+        "checks": [
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "checkov",
+              "trivy"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "PASSED",
+            "cliExitCode": 0,
+            "verification": "PASSED",
+            "lifecycle": "VERIFIED",
+            "relevantScanners": [
+              "checkov",
+              "trivy"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Targeted verification passed, but a complete release assessment is still required."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "checkov",
+              "trivy"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "checkov",
+              "trivy"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Scanner configuration, ignore scope, or the target file changed since the finding was recorded."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "checkov",
+              "trivy"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "One or more relevant scanners were skipped, failed, degraded, malformed, missing, or did not report a version."
+            },
+            "dashboardAgrees": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "dependencies-workflow",
+      "status": "REAL_VALIDATED",
+      "reason": "Real audit, fix, targeted verification and negative cases completed.",
+      "failure": false,
+      "evidence": {
+        "status": "REAL_VALIDATED",
+        "initialRunId": "20261002145407-a45b29",
+        "findingId": "VCG-CORR-1CC892CACB0D9D",
+        "initialVersions": {
+          "gitleaks": "8.30.1",
+          "trufflehog": null,
+          "semgrep": "1.172.0",
+          "trivy": "0.73.0",
+          "osv-scanner": "2.5.0",
+          "checkov": null,
+          "zap": null,
+          "nuclei": null
+        },
+        "checks": [
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "trivy",
+              "osv-scanner"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "PASSED",
+            "cliExitCode": 0,
+            "verification": "PASSED",
+            "lifecycle": "VERIFIED",
+            "relevantScanners": [
+              "trivy",
+              "osv-scanner"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Targeted verification passed, but a complete release assessment is still required."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "STILL_DETECTED",
+            "cliExitCode": 1,
+            "verification": "STILL_DETECTED",
+            "lifecycle": "OPEN",
+            "relevantScanners": [
+              "trivy",
+              "osv-scanner"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "The relevant scanners completed successfully but reported the correlated finding again."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "trivy",
+              "osv-scanner"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "Scanner configuration, ignore scope, or the target file changed since the finding was recorded."
+            },
+            "dashboardAgrees": true
+          },
+          {
+            "expected": "VERIFICATION_INCOMPLETE",
+            "cliExitCode": 2,
+            "verification": "VERIFICATION_INCOMPLETE",
+            "lifecycle": "FIXED",
+            "relevantScanners": [
+              "trivy",
+              "osv-scanner"
+            ],
+            "releaseGate": {
+              "label": "DO NOT DEPLOY",
+              "reason": "One or more relevant scanners were skipped, failed, degraded, malformed, missing, or did not report a version."
+            },
+            "dashboardAgrees": true
+          }
+        ]
+      }
+    },
+    {
+      "id": "trufflehog-detection",
+      "status": "REAL_PARTIAL",
+      "reason": "Synthetic unverified pattern; no credential verification. This is detector/adapter evidence, not a targeted remediation chain.",
+      "findingCount": 0,
+      "command": {
+        "binary": "$VALIDATION/bin/trufflehog",
+        "args": [
+          "filesystem",
+          "$VALIDATION/projects/trufflehog-detection",
+          "--no-verification",
+          "--no-update",
+          "--no-color",
+          "--json"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 752,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "",
+        "stderr": "{\"level\":\"info-0\",\"ts\":\"2026-10-02T22:54:18+08:00\",\"logger\":\"trufflehog\",\"msg\":\"running source\",\"source_manager_worker_id\":\"U3WSc\",\"with_units\":true}\n{\"level\":\"info-0\",\"ts\":\"2026-10-02T22:54:18+08:00\",\"logger\":\"trufflehog\",\"msg\":\"finished scanning\",\"chunks\":1,\"bytes\":81,\"verified_secrets\":0,\"unverified_secrets\":0,\"scan_duration\":\"1.469583ms\",\"trufflehog_version\":\"3.97.0\",\"verification_caching\":{\"Hits\":0,\"Misses\":0,\"HitsWasted\":0,\"AttemptsSaved\":0,\"VerificationTimeSpentMS\":0}}\n"
+      }
+    },
+    {
+      "id": "trivy-dependencies",
+      "status": "REAL_VALIDATED",
+      "reason": "Historical dependency detection/normalization; see the separate dependencies-workflow for remediation evidence.",
+      "failure": false,
+      "expectedFixtureDetected": true,
+      "findingCount": 7,
+      "metadata": {
+        "Version": 2,
+        "NextUpdate": "2026-08-11T06:54:30.95190594Z",
+        "UpdatedAt": "2026-08-10T06:54:30.951906211Z",
+        "DownloadedAt": "2026-08-10T08:52:54.147708Z"
+      },
+      "structuredOutput": true,
+      "command": {
+        "binary": "$VALIDATION/bin/trivy",
+        "args": [
+          "fs",
+          "--scanners",
+          "vuln",
+          "--skip-db-update",
+          "--skip-java-db-update",
+          "--skip-check-update",
+          "--offline-scan",
+          "--format",
+          "json",
+          "$VALIDATION/projects/dependencies/package-lock.json"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 84,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "{\n  \"SchemaVersion\": 2,\n  \"Trivy\": {\n    \"Version\": \"0.73.0\"\n  },\n  \"ReportID\": \"01a0fd1b-e440-7ccd-9ed6-0ce872587918\",\n  \"CreatedAt\": \"2026-10-02T22:54:18.68884+08:00\",\n  \"ArtifactName\": \"$VALIDATION/projects/dependencies/package-lock.json\",\n  \"ArtifactType\": \"filesystem\",\n  \"Results\": [\n    {\n      \"Target\": \"package-lock.json\",\n      \"Class\": \"lang-pkgs\",\n      \"Type\": \"npm\",\n      \"Packages\": [\n        {\n          \"ID\": \"lodash@4.17.11\",\n          \"Name\": \"lodash\",\n          \"Identifier\": {\n            \"PURL\": \"pkg:npm/lodash@4.17.11\",\n            \"UID\": \"6f639c725e441138\"\n          },\n          \"Version\": \"4.17.11\",\n          \"Relationship\": \"direct\",\n          \"Locations\": [\n            {\n              \"StartLine\": 16,\n              \"EndLine\": 18\n            }\n          ],\n          \"AnalyzedBy\": \"npm\"\n        }\n      ],\n      \"Vulnerabilities\": [\n        {\n          \"VulnerabilityID\": \"CVE-2019-10744\",\n          \"VendorIDs\": [\n            \"GHSA-jf85-cpcp-j695\"\n          ],\n          \"PkgID\": \"lodash@4.17.11\",\n          \"PkgName\": \"lodash\",\n          \"PkgIdentifier\": {\n            \"PURL\": \"pkg:npm/lodash@4.17.11\",\n            \"UID\": \"6f639c725e441138\"\n          },\n          \"InstalledVersion\": \"4.17.11\",\n          \"FixedVersion\": \"4.17.12\",\n          \"Status\": \"fixed\",\n          \"SeveritySource\": \"ghsa\",\n          \"PrimaryURL\": \"https://avd.aquasec.com/nvd/cve-2019-10744\",\n          \"DataSource\": {\n            \"ID\": \"ghsa\",\n            \"Name\": \"GitHub Security Advisory npm\",\n            \"URL\": \"https://github.com/advisories?query=type%3Areviewed+ecosystem%3Anpm\"\n          },\n          \"Fingerprint\": \"sha256:7d18a6a21880c8dcb4301b53f15b06ecfc55cd96da88a856b96eb0a3dc0f0b75\",\n          \"Title\": \"nodejs-lodash: prototype pollution in defaultsDeep function leading to modifying properties\",\n          \"Description\": \"Versions of lodash lower than 4.17.12 are vulnerable to Prototype Pollution. The function defaultsDeep could be tricked into adding or modifying properties of Object.prototype using a constructor payload.\",\n          \"Severity\": \"CRITICAL\",\n          \"CweIDs\": [\n            \"CWE-1321\"\n          ],\n          \"VendorSeverity\": {\n            \"ghsa\": 4,\n            \"nvd\": 4,\n            \"redhat\": 3,\n            \"ruby-advisory-db\": 4\n          },\n          \"CVSS\": {\n            \"ghsa\": {\n              \"V3Vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H\",\n              \"V3Score\": 9.1\n            },\n            \"nvd\": {\n              \"V2Vector\": \"AV:N/AC:L/Au:N/C:N/I:P/A:P\",\n              \"V3Vector\": \"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H\",\n              \"V2Score\": 6.4,\n              \"V3Score\": 9.1\n            },\n            \"redhat\": {\n              \"V3Vector\": \"CVSS:3.0/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:H/A:H\",\n              \"V3Score\": 9.1\n            }\n          },\n          \"References\": [\n            \"https://access.redhat.com/errata/RHSA-2019:3024\",\n            \"https://access.redhat.com/security/cve/CVE-2019-10744\",\n         ",
+        "stderr": "2026-10-02T22:54:18+08:00\tINFO\t[vuln] Vulnerability scanning is enabled\n2026-10-02T22:54:18+08:00\tINFO\t[npm] Run \"npm install\" to collect the license information of packages\tdir=\"node_modules\"\n2026-10-02T22:54:18+08:00\tINFO\tNumber of language-specific files\tnum=1\n2026-10-02T22:54:18+08:00\tINFO\t[npm] Detecting vulnerabilities...\n",
+        "stdoutSha256": "9f720b1bf1dfb5958e80ff5810b2d8ef902fda390664e249dc809693f70d0d49",
+        "stdoutTruncated": true
+      }
+    },
+    {
+      "id": "osv-scanner-dependencies",
+      "status": "REAL_VALIDATED",
+      "reason": "Historical dependency detection/normalization; see the separate dependencies-workflow for remediation evidence.",
+      "failure": false,
+      "expectedFixtureDetected": true,
+      "findingCount": 7,
+      "metadata": null,
+      "structuredOutput": true,
+      "command": {
+        "binary": "$VALIDATION/bin/osv-scanner",
+        "args": [
+          "scan",
+          "source",
+          "--recursive",
+          "--format",
+          "json",
+          "$VALIDATION/projects/dependencies"
+        ],
+        "exitCode": 1,
+        "signal": null,
+        "durationMs": 966,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "{\n  \"results\": [\n    {\n      \"source\": {\n        \"path\": \"$VALIDATION/projects/dependencies/package-lock.json\",\n        \"type\": \"lockfile\"\n      },\n      \"packages\": [\n        {\n          \"package\": {\n            \"name\": \"lodash\",\n            \"version\": \"4.17.11\",\n            \"ecosystem\": \"npm\"\n          },\n          \"groups\": [\n            {\n              \"ids\": [\n                \"GHSA-29mw-wpgm-hmr9\"\n              ],\n              \"aliases\": [\n                \"CVE-2020-28500\",\n                \"GHSA-29mw-wpgm-hmr9\"\n              ],\n              \"max_severity\": \"5.3\"\n            },\n            {\n              \"ids\": [\n                \"GHSA-35jh-r3h4-6jhm\",\n                \"GHSA-r5fr-rjxr-66jc\"\n              ],\n              \"aliases\": [\n                \"CVE-2021-23337\",\n                \"CVE-2026-4800\",\n                \"GHSA-35jh-r3h4-6jhm\",\n                \"GHSA-r5fr-rjxr-66jc\"\n              ],\n              \"max_severity\": \"8.1\"\n            },\n            {\n              \"ids\": [\n                \"GHSA-f23m-r3pf-42rh\",\n                \"GHSA-xxjr-mmjv-4gpg\"\n              ],\n              \"aliases\": [\n                \"CVE-2025-13465\",\n                \"CVE-2026-2950\",\n                \"GHSA-f23m-r3pf-42rh\",\n                \"GHSA-xxjr-mmjv-4gpg\"\n              ],\n              \"max_severity\": \"6.9\"\n            },\n            {\n              \"ids\": [\n                \"GHSA-jf85-cpcp-j695\"\n              ],\n              \"aliases\": [\n                \"CVE-2019-10744\",\n                \"GHSA-jf85-cpcp-j695\",\n                \"SNYK-JS-LODASH-450202\"\n              ],\n              \"max_severity\": \"9.1\"\n            },\n            {\n              \"ids\": [\n                \"GHSA-p6mc-m468-83gw\"\n              ],\n              \"aliases\": [\n                \"CVE-2020-8203\",\n                \"GHSA-p6mc-m468-83gw\"\n              ],\n              \"max_severity\": \"7.4\"\n            }\n          ],\n          \"vulnerabilities\": [\n            {\n              \"affected\": [\n                {\n                  \"database_specific\": {\n                    \"source\": \"https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2022/01/GHSA-29mw-wpgm-hmr9/GHSA-29mw-wpgm-hmr9.json\"\n                  },\n                  \"package\": {\n                    \"ecosystem\": \"npm\",\n                    \"name\": \"lodash\",\n                    \"purl\": \"pkg:npm/lodash\"\n                  },\n                  \"ranges\": [\n                    {\n                      \"events\": [\n                        {\n                          \"introduced\": \"4.0.0\"\n                        },\n                        {\n                          \"fixed\": \"4.17.21\"\n                        }\n                      ],\n                      \"type\": \"SEMVER\"\n                    }\n                  ]\n                },\n                {\n                  \"database_specific\": {\n                    \"source\": \"https://github.com/github/advisory-database/blob/main/advisories/github-reviewed/2022/01/GHSA-29mw-wpgm-hmr",
+        "stderr": "Scanning dir $VALIDATION/projects/dependencies\nStarting filesystem walk for root: /\nScanned $VALIDATION/projects/dependencies/package-lock.json file and found 1 package\nEnd status: 3 dirs visited, 4 inodes visited, 1 Extract calls, 243µs elapsed, 243µs wall time\n",
+        "stdoutSha256": "24590c70a995632b5553e7632edcfc2c6778b600387c1101d7611075bd342982",
+        "stdoutTruncated": true
+      }
+    },
+    {
+      "id": "trivy-db-freshness",
+      "status": "REAL_PARTIAL",
+      "reason": "Existing usable DB is expired or its freshness is unknown. No refresh attempted.",
+      "schemaVersion": 2,
+      "expired": true,
+      "nextUpdate": "2026-08-11T06:54:30.95190594Z"
+    },
+    {
+      "id": "nuclei-runtime",
+      "status": "REAL_VALIDATED",
+      "reason": "Existing signed official git-config template against localhost only; direct finding/fix/rescan, not VCG runtime-family verification.",
+      "command": {
+        "binary": "$VALIDATION/bin/nuclei",
+        "args": [
+          "-u",
+          "http://127.0.0.1:57551",
+          "-t",
+          "$HOME/nuclei-templates/http/exposures/configs/git-config.yaml",
+          "-dut",
+          "-ni",
+          "-duc",
+          "-jsonl",
+          "-silent",
+          "-timeout",
+          "3",
+          "-retries",
+          "0"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 244,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "{\"template-url\":\"https://cloud.projectdiscovery.io/public/git-config\",\"template-id\":\"git-config\",\"template-path\":\"$HOME/nuclei-templates/http/exposures/configs/git-config.yaml\",\"info\":{\"name\":\"Git Configuration - Detect\",\"author\":[\"pdteam\",\"pikpikcu\",\"mah3sec_\",\"m4lwhere\"],\"tags\":[\"config\",\"git\",\"exposure\",\"vuln\"],\"description\":\"Git configuration was detected via the pattern /.git/config and log file on passed URLs.\",\"severity\":\"medium\",\"metadata\":{\"max-request\":1},\"classification\":{\"cve-id\":null,\"cwe-id\":[\"cwe-200\"],\"cvss-metrics\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\",\"cvss-score\":5.3}},\"type\":\"http\",\"host\":\"127.0.0.1\",\"port\":\"57551\",\"scheme\":\"http\",\"url\":\"http://127.0.0.1:57551\",\"matched-at\":\"http://127.0.0.1:57551/.git/config\",\"request\":\"GET /.git/config HTTP/1.1\\r\\nHost: 127.0.0.1:57551\\r\\nUser-Agent: Mozilla/5.0 (Windows NT 6.1; rv:38.0) Gecko/20100101 Firefox/38.0\\r\\nAccept: */*\\r\\nAccept-Language: en\\r\\nAccept-Encoding: gzip\\r\\n\\r\\n\",\"response\":\"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\nConnection: keep-alive\\r\\nContent-Type: text/plain\\r\\nDate: Fri, 02 Oct 2026 14:54:19 GMT\\r\\nKeep-Alive: timeout=5\\r\\n\\r\\n[core]\\nrepositoryformatversion = 0\\n\",\"ip\":\"127.0.0.1\",\"timestamp\":\"2026-10-02T22:54:19.90929+08:00\",\"curl-command\":\"curl -X 'GET' -d '' -H 'Accept: */*' -H 'Accept-Language: en' -H 'User-Agent: Mozilla/5.0 (Windows NT 6.1; rv:38.0) Gecko/20100101 Firefox/38.0' 'http://127.0.0.1:57551/.git/config'\",\"matcher-status\":true}\n",
+        "stderr": ""
+      },
+      "fixed": {
+        "binary": "$VALIDATION/bin/nuclei",
+        "args": [
+          "-u",
+          "http://127.0.0.1:57551",
+          "-t",
+          "$HOME/nuclei-templates/http/exposures/configs/git-config.yaml",
+          "-dut",
+          "-ni",
+          "-duc",
+          "-jsonl",
+          "-silent",
+          "-timeout",
+          "3",
+          "-retries",
+          "0"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 144,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "",
+        "stderr": ""
+      },
+      "detected": true,
+      "failure": false,
+      "templateHash": "bd8bdfa0b5ed5bf4d3712edb793adfd0987d9282e51c6f7d673bf14b9e4dd524",
+      "upstream": "https://github.com/projectdiscovery/nuclei-templates",
+      "vcgRuntimeVerification": "NOT_TESTED"
+    },
+    {
+      "id": "zap-runtime",
+      "status": "REAL_VALIDATED",
+      "reason": "Expected missing clickjacking/CSP header on a disposable local page. Direct detection/normalization only; targeted runtime verification NOT_TESTED.",
+      "failure": false,
+      "detected": true,
+      "findingCount": 4,
+      "command": {
+        "binary": "$VALIDATION/bin/zap",
+        "args": [
+          "-dir",
+          "$VALIDATION/home/zap",
+          "-cmd",
+          "-config",
+          "autoupdate.checkOnStart=false",
+          "-config",
+          "autoupdate.downloadNewRelease=false",
+          "-quickurl",
+          "http://127.0.0.1:57551",
+          "-quickout",
+          "$VALIDATION/zap-report.json",
+          "-quickprogress"
+        ],
+        "exitCode": 0,
+        "signal": null,
+        "durationMs": 15196,
+        "timedOut": false,
+        "overflow": false,
+        "error": null,
+        "stdout": "Found Java version 17.0.17\nAvailable memory: 16384 MB\nUsing JVM args: -Xmx4096m\n163 [main] INFO  org.parosproxy.paros.Constant - Copying default configuration to $VALIDATION/home/zap/config.xml\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/session\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/dirbuster\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/fuzzers\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/plugin\nAccessing URL\nUsing traditional spider\nActive scanning\n[====================] 100% \nAttack complete\nWriting results to $VALIDATION/zap-report.json\n",
+        "stderr": ""
+      },
+      "vcgRuntimeVerification": "NOT_TESTED"
+    },
+    {
+      "id": "trufflehog-remediation-chain",
+      "status": "NOT_TESTED",
+      "reason": "Detector execution does not establish a TruffleHog-originated VCG remediation chain."
+    },
+    {
+      "id": "runtime-family-verification",
+      "status": "NOT_TESTED",
+      "reason": "The default VCG runtime profile uses tech templates, not this exposure template; no selection redesign or false VERIFIED claim."
+    }
+  ],
+  "representativeScans": [
+    {
+      "tool": "gitleaks",
+      "binary": "/opt/homebrew/Cellar/gitleaks/8.30.1/bin/gitleaks",
+      "args": [
+        "detect",
+        "--config",
+        "$VALIDATION/projects/secret/.gitleaks.toml",
+        "--source",
+        "$VALIDATION/projects/secret",
+        "--no-git",
+        "--redact",
+        "--report-format",
+        "json",
+        "--report-path",
+        "$VALIDATION/runs/20261002145329-69a17a/gitleaks-report.json"
+      ],
+      "exitCode": 1,
+      "signal": null,
+      "durationMs": 14,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "",
+      "stderr": "\n    ○\n    │╲\n    │ ○\n    ○ ░\n    ░    gitleaks\n\n10:53PM INF scanned ~253 bytes (253 bytes) in 6.51ms\n10:53PM WRN leaks found: 1\n"
+    },
+    {
+      "tool": "trufflehog",
+      "binary": "/opt/homebrew/bin/trufflehog",
+      "args": [
+        "filesystem",
+        "$VALIDATION/projects/secret",
+        "--no-verification",
+        "--no-update",
+        "--no-color",
+        "--json"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 711,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "",
+      "stderr": "{\"level\":\"info-0\",\"ts\":\"2026-10-02T22:53:30+08:00\",\"logger\":\"trufflehog\",\"msg\":\"running source\",\"source_manager_worker_id\":\"HTiuI\",\"with_units\":true}\n{\"level\":\"info-0\",\"ts\":\"2026-10-02T22:53:30+08:00\",\"logger\":\"trufflehog\",\"msg\":\"finished scanning\",\"chunks\":2,\"bytes\":253,\"verified_secrets\":0,\"unverified_secrets\":0,\"scan_duration\":\"1.534625ms\",\"trufflehog_version\":\"3.97.0\",\"verification_caching\":{\"Hits\":0,\"Misses\":0,\"HitsWasted\":0,\"AttemptsSaved\":0,\"VerificationTimeSpentMS\":0}}\n"
+    },
+    {
+      "tool": "semgrep",
+      "binary": "/opt/homebrew/Cellar/semgrep/1.172.0/libexec/bin/semgrep",
+      "args": [
+        "scan",
+        "--config",
+        "$VALIDATION/local-semgrep.yml",
+        "$VALIDATION/projects/secret",
+        "--json"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 996,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "{\"version\":\"1.172.0\",\"results\":[],\"errors\":[],\"paths\":{\"scanned\":[\"$VALIDATION/projects/secret/src/config.js\"]},\"time\":{\"rules\":[],\"rules_parse_time\":0.0005240440368652344,\"profiling_times\":{\"config_time\":0.09764695167541504,\"core_time\":0.19438886642456055,\"ignores_time\":4.601478576660156e-05,\"total_time\":0.2959110736846924},\"parsing_time\":{\"total_time\":0.0,\"per_file_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_files\":[]},\"scanning_time\":{\"total_time\":0.00020599365234375,\"per_file_time\":{\"mean\":0.00020599365234375,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_files\":[]},\"matching_time\":{\"total_time\":0.0,\"per_file_and_rule_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_rules_on_files\":[]},\"tainting_time\":{\"total_time\":0.0,\"per_def_and_rule_time\":{\"mean\":0.0,\"std_dev\":0.0},\"very_slow_stats\":{\"time_ratio\":0.0,\"count_ratio\":0.0},\"very_slow_rules_on_defs\":[]},\"fixpoint_timeouts\":[],\"prefiltering\":{\"project_level_time\":0.0,\"file_level_time\":0.0,\"rules_with_project_prefilters_ratio\":0.0,\"rules_with_file_prefilters_ratio\":1.0,\"rules_selected_ratio\":0.0,\"rules_matched_ratio\":0.0},\"targets\":[],\"total_bytes\":0,\"max_memory_bytes\":79115072},\"engine_requested\":\"OSS\",\"skipped_rules\":[],\"profiling_results\":[]}\n",
+      "stderr": "               \n               \n┌─────────────┐\n│ Scan Status │\n└─────────────┘\n  Scanning 2 files tracked by git with 1 Code rule:\n  Scanning 1 file.\n                \n                \n┌──────────────┐\n│ Scan Summary │\n└──────────────┘\n✅ Scan completed successfully.\n • Findings: 0 (0 blocking)\n • Rules run: 1\n • Targets scanned: 1\n • Parsed lines: ~100.0%\n • No ignore information available\nRan 1 rule on 1 file: 0 findings.\n"
+    },
+    {
+      "tool": "trivy",
+      "binary": "/opt/homebrew/Cellar/trivy/0.73.0/bin/trivy",
+      "args": [
+        "fs",
+        "--scanners",
+        "vuln",
+        "--skip-db-update",
+        "--format",
+        "json",
+        "$VALIDATION/projects/container"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 48,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "{\n  \"SchemaVersion\": 2,\n  \"Trivy\": {\n    \"Version\": \"0.73.0\"\n  },\n  \"ReportID\": \"01a0fd1b-7f24-7845-8f55-0f3938d626b9\",\n  \"CreatedAt\": \"2026-10-02T22:53:52.804543+08:00\",\n  \"ArtifactName\": \"$VALIDATION/projects/container\",\n  \"ArtifactType\": \"filesystem\"\n}\n",
+      "stderr": "2026-10-02T22:53:52+08:00\tINFO\t[vuln] Vulnerability scanning is enabled\n2026-10-02T22:53:52+08:00\tINFO\tNumber of language-specific files\tnum=0\n"
+    },
+    {
+      "tool": "osv-scanner",
+      "binary": "/opt/homebrew/Cellar/osv-scanner/2.5.0/bin/osv-scanner",
+      "args": [
+        "scan",
+        "source",
+        "--recursive",
+        "--format",
+        "json",
+        "$VALIDATION/projects/container"
+      ],
+      "exitCode": 128,
+      "signal": null,
+      "durationMs": 39,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "",
+      "stderr": "Scanning dir $VALIDATION/projects/container\nStarting filesystem walk for root: /\nEnd status: 3 dirs visited, 6 inodes visited, 0 Extract calls, 308.917µs elapsed, 309µs wall time\nNo package sources found, --help for usage information.\n"
+    },
+    {
+      "tool": "checkov",
+      "binary": "/opt/homebrew/Cellar/checkov/3.3.0_4/libexec/bin/checkov",
+      "args": [
+        "-d",
+        "$VALIDATION/projects/container",
+        "--output",
+        "json"
+      ],
+      "exitCode": 1,
+      "signal": null,
+      "durationMs": 1094,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "{\n    \"check_type\": \"dockerfile\",\n    \"results\": {\n        \"passed_checks\": [\n            {\n                \"check_id\": \"CKV_DOCKER_11\",\n                \"bc_check_id\": null,\n                \"check_name\": \"Ensure From Alias are unique for multistage builds.\",\n                \"check_result\": {\n                    \"result\": \"PASSED\",\n                    \"results_configuration\": null\n                },\n                \"code_block\": [\n                    [\n                        1,\n                        \"FROM node:20-alpine\\n\"\n                    ],\n                    [\n                        2,\n                        \"CMD [\\\"node\\\", \\\"app.js\\\"]\"\n                    ]\n                ],\n                \"file_path\": \"/Dockerfile\",\n                \"file_abs_path\": \"$VALIDATION/projects/container/Dockerfile\",\n                \"repo_file_path\": \"/Dockerfile\",\n                \"file_line_range\": [\n                    1,\n                    2\n                ],\n                \"resource\": \"/Dockerfile.\",\n                \"evaluations\": null,\n                \"check_class\": \"checkov.dockerfile.checks.AliasIsUnique\",\n                \"fixed_definition\": null,\n                \"entity_tags\": null,\n                \"caller_file_path\": null,\n                \"caller_file_line_range\": null,\n                \"resource_address\": null,\n                \"severity\": null,\n                \"bc_category\": null,\n                \"benchmarks\": null,\n                \"description\": null,\n                \"short_description\": null,\n                \"vulnerability_details\": null,\n                \"connected_node\": null,\n                \"guideline\": null,\n                \"details\": [],\n                \"check_len\": null,\n                \"definition_context_file_path\": null\n            },\n            {\n                \"check_id\": \"CKV_DOCKER_7\",\n                \"bc_check_id\": null,\n                \"check_name\": \"Ensure the base image uses a non latest version tag\",\n                \"check_result\": {\n                    \"result\": \"PASSED\",\n                    \"results_configuration\": [\n                        {\n                            \"instruction\": \"FROM\",\n                            \"startline\": 0,\n                            \"endline\": 0,\n                            \"content\": \"FROM node:20-alpine\\n\",\n                            \"value\": \"[REDACTED]]\"\n                        }\n                    ]\n                },\n                \"code_block\": [\n                    [\n                        1,\n                        \"FROM node:20-alpine\\n\"\n                    ]\n                ],\n                \"file_path\": \"/Dockerfile\",\n                \"file_abs_path\": \"$VALIDATION/projects/container/Dockerfile\",\n                \"repo_file_path\": \"/Dockerfile\",\n                \"file_line_range\": [\n                    1,\n                    1\n                ],\n                \"resource\": \"/Dockerfile.FROM\",\n                \"evaluations\": null,\n                \"check_class\": \"checkov.dockerfil",
+      "stderr": "",
+      "stdoutSha256": "227f1c018341f03211e51847c6048775170621756c7f8e7440b9c19857683bb0",
+      "stdoutTruncated": true
+    },
+    {
+      "tool": "zap",
+      "binary": "/Applications/ZAP.app/Contents/Java/zap.sh",
+      "args": [
+        "-dir",
+        "$VALIDATION/home/zap",
+        "-cmd",
+        "-config",
+        "autoupdate.checkOnStart=false",
+        "-config",
+        "autoupdate.downloadNewRelease=false",
+        "-quickurl",
+        "http://127.0.0.1:57551",
+        "-quickout",
+        "$VALIDATION/zap-report.json",
+        "-quickprogress"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 15145,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "Found Java version 17.0.17\nAvailable memory: 16384 MB\nUsing JVM args: -Xmx4096m\n163 [main] INFO  org.parosproxy.paros.Constant - Copying default configuration to $VALIDATION/home/zap/config.xml\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/session\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/dirbuster\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/fuzzers\n199 [main] INFO  org.parosproxy.paros.Constant - Creating directory $VALIDATION/home/zap/plugin\nAccessing URL\nUsing traditional spider\nActive scanning\n[====================] 100% \nAttack complete\nWriting results to $VALIDATION/zap-report.json\n",
+      "stderr": ""
+    },
+    {
+      "tool": "nuclei",
+      "binary": "/opt/homebrew/Cellar/nuclei/3.11.1/bin/nuclei",
+      "args": [
+        "-u",
+        "http://127.0.0.1:57551",
+        "-t",
+        "$HOME/nuclei-templates/http/exposures/configs/git-config.yaml",
+        "-dut",
+        "-ni",
+        "-duc",
+        "-jsonl",
+        "-silent",
+        "-timeout",
+        "3",
+        "-retries",
+        "0"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 181,
+      "timedOut": false,
+      "overflow": false,
+      "error": null,
+      "stdout": "{\"template-url\":\"https://cloud.projectdiscovery.io/public/git-config\",\"template-id\":\"git-config\",\"template-path\":\"$HOME/nuclei-templates/http/exposures/configs/git-config.yaml\",\"info\":{\"name\":\"Git Configuration - Detect\",\"author\":[\"pdteam\",\"pikpikcu\",\"mah3sec_\",\"m4lwhere\"],\"tags\":[\"config\",\"git\",\"exposure\",\"vuln\"],\"description\":\"Git configuration was detected via the pattern /.git/config and log file on passed URLs.\",\"severity\":\"medium\",\"metadata\":{\"max-request\":1},\"classification\":{\"cve-id\":null,\"cwe-id\":[\"cwe-200\"],\"cvss-metrics\":\"CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N\",\"cvss-score\":5.3}},\"type\":\"http\",\"host\":\"127.0.0.1\",\"port\":\"57551\",\"scheme\":\"http\",\"url\":\"http://127.0.0.1:57551\",\"matched-at\":\"http://127.0.0.1:57551/.git/config\",\"request\":\"GET /.git/config HTTP/1.1\\r\\nHost: 127.0.0.1:57551\\r\\nUser-Agent: Mozilla/5.0 (Windows NT 6.1; rv:38.0) Gecko/20100101 Firefox/38.0\\r\\nAccept: */*\\r\\nAccept-Language: en\\r\\nAccept-Encoding: gzip\\r\\n\\r\\n\",\"response\":\"HTTP/1.1 200 OK\\r\\nTransfer-Encoding: chunked\\r\\nConnection: keep-alive\\r\\nContent-Type: text/plain\\r\\nDate: Fri, 02 Oct 2026 14:54:19 GMT\\r\\nKeep-Alive: timeout=5\\r\\n\\r\\n[core]\\nrepositoryformatversion = 0\\n\",\"ip\":\"127.0.0.1\",\"timestamp\":\"2026-10-02T22:54:19.90929+08:00\",\"curl-command\":\"curl -X 'GET' -d '' -H 'Accept: */*' -H 'Accept-Language: en' -H 'User-Agent: Mozilla/5.0 (Windows NT 6.1; rv:38.0) Gecko/20100101 Firefox/38.0' 'http://127.0.0.1:57551/.git/config'\",\"matcher-status\":true}\n",
+      "stderr": ""
+    }
+  ]
+}

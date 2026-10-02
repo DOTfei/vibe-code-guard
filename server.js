@@ -493,6 +493,14 @@ function semgrepArgs(projectPath) {
   return ['scan', '--config=p/security-audit', projectPath, '--json'];
 }
 
+function trufflehogArgs(projectPath) {
+  return ['filesystem', projectPath, '--no-verification', '--no-update', '--no-color', '--json'];
+}
+
+function nucleiArgs(target) {
+  return ['-u', target, '-tags', 'tech', '-jsonl', '-silent', '-no-interactsh', '-disable-update-check'];
+}
+
 function updateToolVersion(tool) {
   const commands = {
     gitleaks: ['version'],
@@ -642,12 +650,12 @@ function targetedScannerSpec(tool, run, finding = null) {
   const trivyScanner = ['CONFIGURATION', 'INFRASTRUCTURE', 'MISCONFIGURATION'].includes(category) ? 'config' : 'vuln';
   const specs = {
     gitleaks: { stage: 'rescan', args: gitleaksArgs(run.projectPath, report('gitleaks-report.json')), outputName: 'gitleaks-output.txt', reportPath: report('gitleaks-report.json') },
-    trufflehog: { stage: 'rescan', args: ['filesystem', run.projectPath, '--no-verification', '--no-update', '--no-color', '--json'], outputName: 'trufflehog-output.jsonl' },
+    trufflehog: { stage: 'rescan', args: trufflehogArgs(run.projectPath), outputName: 'trufflehog-output.jsonl' },
     semgrep: { stage: 'rescan', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json' },
     'osv-scanner': { stage: 'rescan', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json' },
     trivy: { stage: 'rescan', args: ['fs', '--scanners', trivyScanner, '--skip-db-update', '--format', 'json', run.projectPath], outputName: 'trivy-output.json' },
     checkov: { stage: 'rescan', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json' },
-    nuclei: { stage: 'web', args: ['-u', run.webTarget, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl' },
+    nuclei: { stage: 'web', args: nucleiArgs(run.webTarget), outputName: 'nuclei-output.jsonl' },
     zap: { stage: 'web', args: ['-cmd', '-quickurl', run.webTarget, '-quickout', report('zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', reportPath: report('zap-report.json') },
   };
   return specs[tool] || null;
@@ -1060,7 +1068,7 @@ async function runPlannedAudit(run) {
 
   await executeStage('secrets', [
     { tool: 'gitleaks', args: gitleaksArgs(run.projectPath, path.join(run.dir, 'gitleaks-report.json')), outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json') },
-    { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: null },
+    { tool: 'trufflehog', args: trufflehogArgs(run.projectPath), outputName: 'trufflehog-output.jsonl', parser: null },
   ]);
   await executeStage('static', [
     { tool: 'semgrep', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json', parser: null },
@@ -1091,7 +1099,7 @@ async function runPlannedAudit(run) {
     if (!target) skipStage(run, 'web', 'The automatic plan selected runtime checks, but no authorized localhost target is available.');
     else {
       stageStart(run, 'web');
-      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl', parser: null });
+      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: nucleiArgs(target), outputName: 'nuclei-output.jsonl', parser: null });
       if (webTools.includes('zap')) {
         const zapPath = resolveBinary('zap');
         if (zapPath !== 'zap' && fs.existsSync(zapPath)) await executeScanner(run, { tool: 'zap', stage: 'web', args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.json') });
@@ -1134,7 +1142,7 @@ async function runAudit(run) {
     });
     await executeScanner(run, {
       tool: 'trufflehog', stage: 'secrets',
-      args: ['filesystem', run.projectPath, '--no-verification', '--json'],
+      args: trufflehogArgs(run.projectPath),
       outputName: 'trufflehog-output.jsonl', parser: null,
     });
     stageFinish(run, 'secrets', [run.tools.gitleaks, run.tools.trufflehog].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
@@ -1180,7 +1188,7 @@ async function runAudit(run) {
       stageStart(run, 'web');
       await executeScanner(run, {
         tool: 'nuclei', stage: 'web',
-        args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'],
+        args: nucleiArgs(target),
         outputName: 'nuclei-output.jsonl', parser: null,
       });
       const zapPath = resolveBinary('zap');

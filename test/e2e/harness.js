@@ -52,6 +52,11 @@ const all = JSON.parse(process.env.VCG_E2E_FINDINGS || '{}');
 let items = Array.isArray(all[tool]) ? all[tool] : [];
 if (process.env.VCG_E2E_VERIFY_MODE === 'clean' && tool === 'semgrep') items = [];
 const reportArgument = (flag) => { const index = args.indexOf(flag); return index >= 0 ? args[index + 1] : null; };
+if (process.env.VCG_E2E_ASSERT_OFFLINE === '1') {
+  const required = tool === 'trufflehog' ? ['--no-verification', '--no-update', '--no-color', '--json']
+    : tool === 'nuclei' ? ['-no-interactsh', '-disable-update-check'] : [];
+  if (required.some(flag => !args.includes(flag))) { process.stderr.write('Missing scanner safety flag'); process.exit(2); }
+}
 const emitResults = () => {
 if (tool === 'gitleaks') {
   const report = reportArgument('--report-path');

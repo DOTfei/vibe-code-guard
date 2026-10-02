@@ -66,6 +66,26 @@ test('scope changes and multi-scanner gaps cannot establish VERIFIED', () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('dependency advisory titles cannot substitute Semgrep for required OSV coverage, including historical findings', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const raw = adaptScannerOutput('trivy', JSON.stringify({ Results: [{ Target: 'package-lock.json', Vulnerabilities: [{
+    VulnerabilityID: 'CVE-2021-23337', PkgName: 'lodash', InstalledVersion: '4.17.11',
+    Title: 'lodash command injection', Severity: 'HIGH',
+  }] }] }), { projectPath: '/tmp/synthetic-dependency' })[0];
+  assert.equal(raw.category, 'DEPENDENCY_VULNERABILITY');
+  const current = reconcileFindings([], [raw], { projectId: 'synthetic-dependency', projectPath: '/tmp/synthetic-dependency', runId: 'synthetic-run' }).findings[0];
+  for (const finding of [current, { ...current, category: 'INJECTION' }]) {
+    const plan = { ...verificationPlan(finding), baselineScopeFingerprint: 'unchanged-scope' };
+    assert.deepEqual(plan.relevantScanners.sort(), ['osv-scanner', 'trivy']);
+    const coverage = verificationCoverage(plan, {
+      trivy: { status: 'PASS', decision: 'RUN', parseValid: true, version: '0.73.0' },
+      semgrep: { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.172.0' },
+    }, { currentScopeFingerprint: 'unchanged-scope' });
+    assert.equal(coverage.complete, false);
+    assert.equal(verificationOutcome({ finding, updatedFinding: { ...finding, status: 'VERIFIED' }, coverage }).verification, 'VERIFICATION_INCOMPLETE');
+  }
+});
+
 test('targeted verification integration verifies a fixed finding with only the relevant fake scanner', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-verify-integration-'));
   let project = path.join(root, 'project');

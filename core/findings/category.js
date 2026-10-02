@@ -16,6 +16,8 @@ const CATEGORIES = Object.freeze([
 ]);
 
 function normalizeCategory(value, hints = '') {
+  const explicit = String(value || '').trim().toUpperCase();
+  if (CATEGORIES.includes(explicit)) return explicit;
   const raw = `${value || ''} ${hints || ''}`.trim().toUpperCase();
   if (CATEGORIES.includes(raw)) return raw;
   const text = raw.replace(/[_-]+/g, ' ');

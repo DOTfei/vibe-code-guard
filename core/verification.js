@@ -63,6 +63,9 @@ function projectScopeFingerprint(projectPath, targetFile = null, runtimeTarget =
 }
 
 function familyForFinding(finding) {
+  // Historical dependency findings may have been misclassified from advisory titles.
+  if ((finding?.observations || []).some((item) => ['trivy', 'osv-scanner'].includes(item.scanner)
+    && /^(?:CVE-|GHSA-|OSV-)/i.test(item.ruleId || ''))) return SCANNER_FAMILIES.DEPENDENCY_VULNERABILITY;
   const category = String(finding?.category || '').toUpperCase().replaceAll(' ', '_');
   if (SCANNER_FAMILIES[category]) return SCANNER_FAMILIES[category];
   return [...new Set((finding?.observations || []).map((item) => item.scanner).filter((item) => KNOWN_SCANNERS.has(item)))];
