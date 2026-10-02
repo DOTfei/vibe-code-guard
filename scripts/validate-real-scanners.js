@@ -14,16 +14,23 @@ const ROOT = path.resolve(__dirname, '..');
 const MANIFEST = require('../config/toolchain.json');
 const active = new Set();
 const LIMIT = 8 * 1024 * 1024;
+let stopping = false, scannerLauncher = false;
 
 function kill(child, signal = 'SIGTERM') {
   try { process.kill(-child.pid, signal); } catch { try { child.kill(signal); } catch {} }
 }
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
-  for (const child of active) kill(child, 'SIGKILL');
-  process.exit(2);
+  if (stopping) return;
+  stopping = true;
+  // Forward cancellation through wrappers; only the leaf owns the real scanner.
+  Promise.all([...active].map((child) => new Promise((resolve) => {
+    child.once('close', resolve);
+    kill(child, scannerLauncher ? 'SIGKILL' : 'SIGTERM');
+  }))).then(() => process.exit(2));
 });
 
 function runProcess(binary, args, env, timeoutMs = 45000, cwd = ROOT) {
+  if (stopping) return Promise.reject(new Error('Validation cancelled; no further processes may start.'));
   return new Promise((resolve) => {
     const started = Date.now();
     const child = spawn(binary, args, { env, cwd, detached: true, stdio: ['ignore', 'pipe', 'pipe'], shell: false });
@@ -73,6 +80,25 @@ function safeEvidence(value, root = '', home = '') {
   return value;
 }
 
+function isolatedEnvironment(root, inherited = process.env) {
+  return { ...inherited,
+    SEMGREP_SETTINGS_FILE: path.join(root, 'home/semgrep-settings.yml'),
+    SEMGREP_LOG_FILE: path.join(root, 'home/semgrep.log'),
+    SEMGREP_VERSION_CACHE_PATH: path.join(root, 'cache/semgrep-version'),
+  };
+}
+
+function parseDependencyOutput(id, command, projectPath) {
+  try {
+    const parsed = JSON.parse(command.stdout);
+    assert.ok(parsed && Array.isArray(parsed[id === 'trivy' ? 'Results' : 'results']), 'Expected dependency result array is missing.');
+    const findings = adaptScannerOutput(id, command.stdout, { projectPath });
+    return { parsed, findings, failure: false };
+  } catch {
+    return { parsed: null, findings: [], failure: [0, 1].includes(command.exitCode) };
+  }
+}
+
 function writeJson(file, value) { fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { mode: 0o600 }); }
 function hash(file) { try { return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'); } catch { return null; } }
 function findBinary(tool) {
@@ -85,6 +111,7 @@ function findBinary(tool) {
 
 // These launchers execute installed binaries unchanged; they add timeout/evidence capture only.
 async function executeLauncher(id, args) {
+  scannerLauncher = true;
   const context = JSON.parse(fs.readFileSync(process.env.VCG_VALIDATION_CONTEXT, 'utf8'));
   const result = await runProcess(context.binaries[id] || path.join(context.root, 'missing', id), args, process.env, id === 'zap' ? 60000 : 45000, process.cwd());
   const trace = path.join(context.root, 'traces', `${Date.now()}-${process.pid}-${id}.json`);
@@ -180,7 +207,7 @@ async function main() {
     if (fs.existsSync(path.join(cache, dir))) fs.cpSync(path.join(cache, dir), path.join(root, 'cache', dir), { recursive: true, mode: fs.constants.COPYFILE_FICLONE });
   }
   const env = {
-    ...process.env, HOME: path.join(root, 'home'), XDG_CACHE_HOME: path.join(root, 'cache'), XDG_CONFIG_HOME: path.join(root, 'home/.config'),
+    ...isolatedEnvironment(root), HOME: path.join(root, 'home'), XDG_CACHE_HOME: path.join(root, 'cache'), XDG_CONFIG_HOME: path.join(root, 'home/.config'),
     SECURITY_TOOLKIT_HOME: path.join(root, 'toolkit'), SECURITY_DASHBOARD_DATA_DIR: path.join(root, 'runs'),
     SECURITY_TOOL_BINARIES: JSON.stringify(wrappers), VCG_VALIDATION_CONTEXT: contextFile,
     VCG_SEMGREP_CONFIG: '', VCG_GITLEAKS_CONFIG: '', SECURITY_AI_PROVIDER: 'disabled',
@@ -235,9 +262,7 @@ async function main() {
     const args = id === 'trivy' ? ['fs', '--scanners', 'vuln', '--skip-db-update', '--skip-java-db-update', '--skip-check-update', '--offline-scan', '--format', 'json', path.join(dependencies, 'package-lock.json')]
       : ['scan', 'source', '--recursive', '--format', 'json', dependencies];
     const command = await runProcess(wrappers[id], args, env, 60000);
-    let findings = [], failure = false, parsed = null;
-    try { parsed = JSON.parse(command.stdout); findings = adaptScannerOutput(id, command.stdout, { projectPath: dependencies }); }
-    catch { failure = command.exitCode === 0; }
+    let { findings, failure, parsed } = parseDependencyOutput(id, command, dependencies);
     const expected = findings.some((item) => /lodash/i.test(item.title + item.explanation.technical) && /CVE-|GHSA-/i.test(item.title + item.explanation.technical));
     failure ||= !!parsed && [0, 1].includes(command.exitCode) && !expected;
     add(`${id}-dependencies`, failure ? 'REAL_PARTIAL' : expected && inventory[id].version && [0, 1].includes(command.exitCode) && !command.timedOut && !command.overflow ? 'REAL_VALIDATED' : 'BLOCKED_BY_ENVIRONMENT', expected ? 'Historical dependency detection/normalization; see the separate dependencies-workflow for remediation evidence.' : 'Dependency intelligence unavailable or expected dependency not detected.', { failure, expectedFixtureDetected: expected, findingCount: findings.length, metadata: id === 'trivy' && fs.existsSync(metadataFile) ? JSON.parse(fs.readFileSync(metadataFile)) : null, structuredOutput: !!parsed, command });
@@ -297,10 +322,11 @@ async function main() {
   process.exitCode = exitCode;
 }
 
-module.exports = { summaryExit, safeEvidence, runProcess, executeLauncher, installedVersion };
+module.exports = { summaryExit, safeEvidence, runProcess, executeLauncher, installedVersion, isolatedEnvironment, parseDependencyOutput };
 if (require.main === module) {
   const task = process.argv[2] === '--chain' ? chainWorker(process.argv[3], process.argv[4]).then((result) => console.log(JSON.stringify(result))) : main();
   task.catch((error) => {
+    if (stopping) return;
     if (process.argv.includes('--json')) console.log(JSON.stringify({ schemaVersion: '1.0', exitCode: 1, error: redact(error.message) }));
     console.error(redact(error.stack)); process.exitCode = 1;
   });

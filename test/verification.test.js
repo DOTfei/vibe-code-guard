@@ -86,6 +86,37 @@ test('dependency advisory titles cannot substitute Semgrep for required OSV cove
   }
 });
 
+test('legacy dependency categories preserve finding identity and never verify a still-detected advisory', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const { compareEvidence } = require('../core/correlation/correlation-key');
+  const context = { projectId: 'legacy-dependency', projectPath: '/tmp/synthetic-dependency', runId: 'old-run' };
+  const raw = adaptScannerOutput('trivy', JSON.stringify({ Results: [{ Target: 'package-lock.json', Vulnerabilities: [{
+    VulnerabilityID: 'CVE-2021-23337', PkgName: 'lodash', InstalledVersion: '4.17.11', Title: 'lodash command injection', Severity: 'HIGH',
+  }] }] }), context)[0];
+  const oldRaw = createFinding({ ...raw, category: 'INJECTION', id: undefined, fingerprint: undefined }, context);
+  assert.notEqual(oldRaw.fingerprint, raw.fingerprint);
+  const legacy = reconcileFindings([], [oldRaw], context).findings[0];
+  legacy.scopeFingerprint = 'unchanged';
+  const tools = Object.fromEntries(['trivy', 'osv-scanner'].map(scanner => [scanner, { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.0.0' }]));
+  for (const status of ['FIXED', 'VERIFIED']) {
+    const finding = { ...legacy, status };
+    const coverage = verificationCoverage(verificationPlan(finding), tools, { currentScopeFingerprint: 'unchanged' });
+    const reconciled = reconcileFindings([finding], [raw], { ...context, runId: 'new-run', tools, verificationScopeValid: coverage.complete });
+    assert.equal(reconciled.findings.length, 1);
+    assert.equal(reconciled.findings[0].id, legacy.id);
+    assert.equal(reconciled.findings[0].status, status === 'VERIFIED' ? 'REOPENED' : 'OPEN');
+    assert.equal(verificationOutcome({ finding, updatedFinding: reconciled.findings[0], coverage }).verification, 'STILL_DETECTED');
+  }
+  for (const changed of [
+    { packageName: 'another-package' }, { installedVersion: '0.0.1' }, { file: 'other/package-lock.json' }, { ecosystem: 'pypi' },
+  ]) {
+    const current = reconcileFindings([], [raw], context).findings[0].observations[0];
+    assert.equal(compareEvidence({ ...current, identity: { ...current.identity, ...changed } }, legacy.observations[0]), 'NONE');
+  }
+  const clean = reconcileFindings([{ ...legacy, status: 'FIXED' }], [], { ...context, tools, verificationScopeValid: true });
+  assert.equal(clean.findings[0].status, 'VERIFIED');
+});
+
 test('targeted verification integration verifies a fixed finding with only the relevant fake scanner', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-verify-integration-'));
   let project = path.join(root, 'project');

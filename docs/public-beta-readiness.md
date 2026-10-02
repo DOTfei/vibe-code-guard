@@ -183,6 +183,12 @@ No global tools or security content were upgraded/refreshed. These results
 do not establish all-eight full validation, complete real-world coverage,
 current global toolchain health, legal compliance, or bug-free software.
 
+The 2026-10-03 local post-review replay retained those evidence boundaries
+after repairing legacy-category matching, cancellation cleanup, Semgrep path
+isolation, and malformed dependency-output classification. The report links
+the separate dated capture; 98 mock/regression tests pass, and the manual
+real-scanner run remains exit 2, not full-validation exit 0.
+
 ## Dashboard and agent acceptance
 
 The human first screen is organized around project status, release decision,

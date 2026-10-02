@@ -3,8 +3,11 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
-const { summaryExit, safeEvidence, runProcess, installedVersion } = require('../scripts/validate-real-scanners');
+const os = require('node:os');
+const http = require('node:http');
+const { once } = require('node:events');
+const { execFileSync, spawn } = require('node:child_process');
+const { summaryExit, safeEvidence, runProcess, installedVersion, isolatedEnvironment, parseDependencyOutput } = require('../scripts/validate-real-scanners');
 const { ROOT, copyFixture, createMockToolchain } = require('./e2e/harness');
 
 test('real validation never promotes partial, missing, or failed evidence to exit zero', () => {
@@ -28,6 +31,55 @@ test('real validation bounds a stalled subprocess', async () => {
   const result = await runProcess(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], process.env, 100);
   assert.equal(result.timedOut, true);
   assert.ok(result.durationMs < 3000);
+});
+
+test('real validation isolates inherited Semgrep paths and treats malformed OSV exit-one output as failure', () => {
+  const inherited = { SEMGREP_SETTINGS_FILE: '/host/settings', SEMGREP_LOG_FILE: '/host/log', SEMGREP_VERSION_CACHE_PATH: '/host/cache', PATH: '/usr/bin' };
+  const env = isolatedEnvironment('/tmp/isolated', inherited);
+  for (const key of ['SEMGREP_SETTINGS_FILE', 'SEMGREP_LOG_FILE', 'SEMGREP_VERSION_CACHE_PATH']) assert.ok(env[key].startsWith('/tmp/isolated/'));
+  assert.equal(inherited.SEMGREP_SETTINGS_FILE, '/host/settings');
+  assert.equal(env.PATH, inherited.PATH);
+  for (const exitCode of [0, 1]) {
+    for (const stdout of ['not JSON', 'null', '{}', '[]']) {
+      const result = parseDependencyOutput('osv-scanner', { exitCode, stdout }, '/tmp/fixture');
+      assert.equal(result.failure, true);
+      assert.equal(summaryExit([{ status: 'REAL_PARTIAL', failure: result.failure }]), 1);
+    }
+  }
+  assert.equal(parseDependencyOutput('osv-scanner', { exitCode: 1, stdout: '{"results":[]}' }, '/tmp/fixture').failure, false);
+  assert.equal(parseDependencyOutput('osv-scanner', { exitCode: 127, stdout: '' }, '/tmp/fixture').failure, false);
+});
+
+test('interrupting nested validation wrappers terminates even a scanner that ignores SIGTERM', { timeout: 15000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-cancel-test-'));
+  fs.mkdirSync(path.join(root, 'traces'));
+  const contextFile = path.join(root, 'context.json');
+  fs.writeFileSync(contextFile, JSON.stringify({ root, originalHome: os.homedir(), binaries: { fake: process.execPath } }));
+  const harness = path.join(ROOT, 'scripts/validate-real-scanners.js');
+  let leafPid, parent;
+  let ready;
+  const leafReady = new Promise(resolve => { ready = resolve; });
+  const observer = http.createServer((request, response) => { leafPid = Number(request.url.slice(1)); response.end('ok'); ready(); });
+  await new Promise(resolve => observer.listen(0, '127.0.0.1', resolve));
+  try {
+    const leaf = `process.on('SIGTERM',()=>{});require('node:http').get('http://127.0.0.1:${observer.address().port}/'+process.pid);setInterval(()=>{},1000);`;
+    const launcher = `require(${JSON.stringify(harness)}).executeLauncher('fake',['-e',${JSON.stringify(leaf)}]);`;
+    const worker = `require(${JSON.stringify(harness)}).runProcess(process.execPath,['-e',${JSON.stringify(launcher)}],process.env,8000);`;
+    const outer = `require(${JSON.stringify(harness)}).runProcess(process.execPath,['-e',${JSON.stringify(worker)}],process.env,8000);`;
+    parent = spawn(process.execPath, ['-e', outer], { env: { ...process.env, VCG_VALIDATION_CONTEXT: contextFile }, stdio: 'ignore' });
+    await Promise.race([leafReady, new Promise((_, reject) => setTimeout(() => reject(new Error('Synthetic scanner did not start')), 5000).unref())]);
+    const exited = once(parent, 'close', { signal: AbortSignal.timeout(5000) });
+    parent.kill('SIGTERM');
+    const [exitCode] = await exited;
+    assert.equal(exitCode, 2);
+    assert.throws(() => process.kill(leafPid, 0), { code: 'ESRCH' });
+  } finally {
+    parent?.kill('SIGTERM');
+    if (leafPid) { try { process.kill(-leafPid, 'SIGKILL'); } catch {} }
+    observer.closeAllConnections?.();
+    await new Promise(resolve => observer.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('ordinary and automatic audits send offline safety flags to actual scanner invocations', () => {

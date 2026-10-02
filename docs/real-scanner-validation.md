@@ -1,5 +1,41 @@
 # Real Scanner Validation
 
+## Post-review repairs: 2026-10-03 (Asia/Kuala_Lumpur)
+
+Review of PR #15 found four defects that the first capture did not exercise:
+
+1. Correcting a historical dependency category changed its fingerprint. A
+   still-present advisory could become a separate finding while the old FIXED
+   entry incorrectly became VERIFIED. Correlation now preserves the old ID
+   across this transition only when scanner, advisory ID, file, package,
+   installed version, and compatible/inferred ecosystem match. Regression
+   tests require STILL_DETECTED or REOPENED and reject different identities.
+2. Abruptly killing an outer wrapper left its detached scanner alive.
+   Cancellation now propagates through wrappers and waits for child closure;
+   the leaf launcher terminates the scanner process group it owns. A harmless
+   nested-process test includes a scanner that ignores SIGTERM and asserts no
+   surviving test scanner after cancellation.
+3. Inherited SEMGREP_SETTINGS_FILE/LOG_FILE/VERSION_CACHE_PATH could bypass
+   temporary HOME. These paths are explicitly redirected inside the run's
+   temporary root. A mock-only test verifies inherited paths are not used.
+4. OSV exit 1 is a supported findings exit code; malformed JSON at that exit
+   was incorrectly classified as environmental degradation. Successful scanner
+   exit codes 0/1 now require a structured dependency result array; malformed,
+   null, or wrong-shape output is a validation failure, returning overall 1.
+
+The [post-repair capture](real-scanner-evidence-2026-10-03.json) completed at
+`2026-10-02T16:01:51.885Z` (2026-10-03 locally). All four real VCG remediation
+chains and the direct localhost Nuclei/ZAP checks still passed. There were no
+assertion failures; the overall manual exit remains **2** because TruffleHog
+detection and Trivy DB freshness remain REAL_PARTIAL, and TruffleHog-originated
+remediation/runtime-family targeted verification remain NOT_TESTED.
+
+`npm test`: **98/98 PASS**. Legacy-state and interruption repairs are proved
+by synthetic/mock regressions; this is not a claim of migrating real user
+history or completing additional runtime verification. Monitored host files
+were unchanged. No global tool/content update or configuration repair occurred.
+The earlier captures below remain dated evidence, not overwritten claims.
+
 ## Follow-up: 2026-10-02
 
 This follow-up supplements, rather than rewrites, the dated v0.7.1 record

@@ -151,7 +151,17 @@ function compareEvidence(leftInput, rightInput, context = {}) {
   const left = comparable(leftInput, context);
   const right = comparable(rightInput, context);
   if (left.scannerId === right.scannerId && left.fingerprint && left.fingerprint === right.fingerprint) return 'EXACT';
-  if (left.category !== right.category) return 'NONE';
+  if (left.category !== right.category) {
+    // Preserve historical dependency IDs after correcting title-based categories.
+    const sameDependency = left.scannerId === right.scannerId && ['trivy', 'osv-scanner'].includes(left.scannerId)
+      && [left.category, right.category].includes('DEPENDENCY_VULNERABILITY')
+      && /^(?:cve-|ghsa-|osv-)/i.test(left.ruleId) && left.ruleId === right.ruleId
+      && left.identity.file && left.identity.file === right.identity.file
+      && left.identity.packageName && left.identity.packageName === right.identity.packageName
+      && left.identity.installedVersion && left.identity.installedVersion === right.identity.installedVersion
+      && (left.identity.ecosystem || inferEcosystem({}, left.identity.file)) === (right.identity.ecosystem || inferEcosystem({}, right.identity.file));
+    return sameDependency ? 'HIGH' : 'NONE';
+  }
   if (left.identity.kind === 'dependency' && right.identity.kind === 'dependency') {
     const ecosystemMatches = !left.identity.ecosystem || !right.identity.ecosystem || left.identity.ecosystem === right.identity.ecosystem;
     const versionMatches = !left.identity.installedVersion || !right.identity.installedVersion || left.identity.installedVersion === right.identity.installedVersion;
