@@ -30,11 +30,38 @@ assertion failures; the overall manual exit remains **2** because TruffleHog
 detection and Trivy DB freshness remain REAL_PARTIAL, and TruffleHog-originated
 remediation/runtime-family targeted verification remain NOT_TESTED.
 
-`npm test`: **98/98 PASS**. Legacy-state and interruption repairs are proved
+`npm test`: **103/103 PASS**. Legacy-state and interruption repairs are proved
 by synthetic/mock regressions; this is not a claim of migrating real user
 history or completing additional runtime verification. Monitored host files
 were unchanged. No global tool/content update or configuration repair occurred.
 The earlier captures below remain dated evidence, not overwritten claims.
+
+### Second review corrections (2026-10-03)
+
+The second review also corrected these evidence/verification boundaries:
+
+- The category correction is now limited to explicit dependency categories.
+  Applying it to all categories changed historical Nuclei fingerprints and
+  could verify an unchanged runtime finding. Other categories retain their
+  previous normalization; unchanged runtime evidence stays STILL_DETECTED.
+- Timeout/overflow cleanup terminates the owned process group before clearing
+  escalation, even when its parent already closed and a descendant ignores TERM.
+- The existing configuration-family mapping omitted the canonical
+  MISCONFIGURATION category. It now requires Checkov and Trivy even when only
+  one scanner originally observed the issue; a missing peer cannot verify it.
+- Historical OSV advisories are not restricted to CVE/GHSA/OSV prefixes.
+  Matching still requires the same scanner, rule, file, package, installed
+  version, and ecosystem; PYSEC-style IDs retain dependency coverage and identity.
+- Authoritative Semgrep/Trivy/OSV execution also requires its expected JSON
+  result array, not merely parseable JSON. The normal targeted-verification
+  integration rejects null/empty-object/wrong-root output as incomplete.
+- A missing required peer scanner or unknown version blocks a manual
+  remediation chain before expected-detection assertions. It remains an
+  environmental limitation (overall 2), not an assertion failure (overall 1).
+
+These final guards are validated by mock findings and harmless Node processes.
+The dated real captures above preceded these guards; no additional real
+runtime-family verification or global freshness validation is claimed.
 
 ## Follow-up: 2026-10-02
 
@@ -110,7 +137,7 @@ regression tests also cover failed/skipped scans and unknown scanner versions.
   flags do not change target authorization or normal template selection.
 - The real Trivy advisory title contained "command injection". Category
   normalization incorrectly overrode its explicit dependency category, which
-  could select Semgrep instead of required OSV coverage. Explicit canonical
+  could select Semgrep instead of required OSV coverage. Explicit dependency
   categories now take precedence. Legacy dependency observations identified by
   scanner/advisory ID retain the dependency scanner family during verification.
   A regression test ensures clean Trivy/Semgrep cannot substitute for OSV.

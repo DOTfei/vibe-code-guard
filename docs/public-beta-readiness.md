@@ -186,8 +186,15 @@ current global toolchain health, legal compliance, or bug-free software.
 The 2026-10-03 local post-review replay retained those evidence boundaries
 after repairing legacy-category matching, cancellation cleanup, Semgrep path
 isolation, and malformed dependency-output classification. The report links
-the separate dated capture; 98 mock/regression tests pass, and the manual
+the separate dated capture; 103 mock/regression tests pass, and the manual
 real-scanner run remains exit 2, not full-validation exit 0.
+The final second-review guards preserve historical runtime categories and
+clean up timeout descendants. Their proof is synthetic regression coverage,
+not an additional real runtime-family verification claim.
+The canonical MISCONFIGURATION category also retains both Checkov and Trivy
+as required verification coverage, including single-scanner-origin findings.
+Opaque historical OSV advisory IDs, invalid dependency/static JSON roots,
+and missing-peer manual validation states are also covered by regressions.
 
 ## Dashboard and agent acceptance
 

@@ -33,6 +33,26 @@ test('real validation bounds a stalled subprocess', async () => {
   assert.ok(result.durationMs < 3000);
 });
 
+test('timeout terminates descendants even after the parent exits and closes its streams', { timeout: 10000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-timeout-test-'));
+  const pidFile = path.join(root, 'leaf.pid');
+  let pid;
+  try {
+    const leaf = `process.on('SIGTERM',()=>{});require('node:fs').writeFileSync(${JSON.stringify(pidFile)},String(process.pid));setInterval(()=>{},1000);`;
+    const parent = `require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(leaf)}],{stdio:'ignore'});setInterval(()=>{},1000);`;
+    const result = await runProcess(process.execPath, ['-e', parent], process.env, 1500);
+    assert.equal(result.timedOut, true);
+    pid = Number(fs.readFileSync(pidFile, 'utf8'));
+    assert.ok(Number.isInteger(pid) && pid > 0);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' });
+  } finally {
+    if (!pid && fs.existsSync(pidFile)) pid = Number(fs.readFileSync(pidFile, 'utf8'));
+    if (Number.isInteger(pid) && pid > 0) { try { process.kill(pid, 'SIGKILL'); } catch {} }
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('real validation isolates inherited Semgrep paths and treats malformed OSV exit-one output as failure', () => {
   const inherited = { SEMGREP_SETTINGS_FILE: '/host/settings', SEMGREP_LOG_FILE: '/host/log', SEMGREP_VERSION_CACHE_PATH: '/host/cache', PATH: '/usr/bin' };
   const env = isolatedEnvironment('/tmp/isolated', inherited);
@@ -78,6 +98,34 @@ test('interrupting nested validation wrappers terminates even a scanner that ign
     if (leafPid) { try { process.kill(-leafPid, 'SIGKILL'); } catch {} }
     observer.closeAllConnections?.();
     await new Promise(resolve => observer.close(resolve));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('manual remediation chain reports a missing peer scanner as environment-blocked, not an assertion failure', () => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'vcg-real-validation-')));
+  const tools = createMockToolchain({ findings: { gitleaks: [{ RuleID: 'synthetic', Description: 'Safe synthetic finding', File: 'src/config.js', StartLine: 1 }] } });
+  try {
+    const project = path.join(root, 'projects', 'secret');
+    fs.mkdirSync(path.join(project, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'package.json'), '{"name":"synthetic-project"}');
+    fs.writeFileSync(path.join(project, 'src/config.js'), 'module.exports = { synthetic: true };\n');
+    const context = path.join(root, 'context.json');
+    fs.writeFileSync(context, JSON.stringify({ root }));
+    const env = { ...tools.env, VCG_VALIDATION_CONTEXT: context, SECURITY_TOOL_BINARIES: JSON.stringify({ ...tools.paths, trufflehog: path.join(root, 'missing-scanner') }) };
+    const output = execFileSync(process.execPath, [path.join(ROOT, 'scripts/validate-real-scanners.js'), '--chain', 'secret', project], { env, encoding: 'utf8', timeout: 30000 });
+    const result = JSON.parse(output);
+    assert.equal(result.status, 'BLOCKED_BY_ENVIRONMENT');
+    assert.equal(!!result.failure, false);
+    assert.equal(summaryExit([result]), 2);
+    const malformed = path.join(root, 'bad-semgrep');
+    fs.writeFileSync(malformed, '#!' + process.execPath + '\nprocess.stdout.write(process.argv.includes("--version") ? "1.0.0\\n" : "{}\\n");\n', { mode: 0o700 });
+    const invalidEnv = { ...env, SECURITY_TOOL_BINARIES: JSON.stringify({ ...tools.paths, semgrep: malformed }) };
+    const invalid = JSON.parse(execFileSync(process.execPath, [path.join(ROOT, 'scripts/validate-real-scanners.js'), '--chain', 'secret', project], { env: invalidEnv, encoding: 'utf8', timeout: 30000 }));
+    assert.equal(invalid.failure, true);
+    assert.equal(summaryExit([invalid]), 1);
+  } finally {
+    fs.rmSync(tools.root, { recursive: true, force: true });
     fs.rmSync(root, { recursive: true, force: true });
   }
 });

@@ -546,7 +546,12 @@ function validateScannerOutput(tool, text) {
     return invalid ? { valid: false, reason: `${tool} emitted malformed JSONL output.` } : { valid: true };
   }
   if (!value) return { valid: false, reason: `${tool} emitted no structured output.` };
-  try { JSON.parse(value); return { valid: true }; } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
+  try {
+    const data = JSON.parse(value);
+    const resultKey = tool === 'trivy' ? 'Results' : ['semgrep', 'osv-scanner'].includes(tool) ? 'results' : null;
+    if (resultKey && (!data || Array.isArray(data) || !Array.isArray(data[resultKey]))) return { valid: false, reason: `${tool} emitted an invalid structured result array.` };
+    return { valid: true };
+  } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
 }
 
 function runtimeTargetReachable(target, timeoutMs = 3000) {

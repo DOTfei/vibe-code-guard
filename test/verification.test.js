@@ -31,6 +31,17 @@ test('targeted verification maps scanner families and rejects missing runtime sc
   assert.equal(verificationOutcome({ finding: runtime, updatedFinding: runtime, coverage }).verification, 'VERIFICATION_INCOMPLETE');
 });
 
+test('canonical misconfiguration findings require both configuration scanners', () => {
+  for (const scanner of ['checkov', 'trivy']) {
+    const finding = { ...syntheticGroup('MISCONFIGURATION', scanner), scopeFingerprint: 'same' };
+    const plan = verificationPlan(finding);
+    assert.deepEqual(plan.relevantScanners.sort(), ['checkov', 'trivy']);
+    const coverage = verificationCoverage(plan, { [scanner]: { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.0.0' } }, { currentScopeFingerprint: 'same' });
+    assert.equal(coverage.complete, false);
+    assert.equal(verificationOutcome({ finding, updatedFinding: { ...finding, status: 'VERIFIED' }, coverage }).verification, 'VERIFICATION_INCOMPLETE');
+  }
+});
+
 test('Dashboard preserves explicit verification outcomes', () => {
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'), 'utf8');
   const app = fs.readFileSync(path.join(ROOT, 'public', 'app.js'), 'utf8');
@@ -86,6 +97,23 @@ test('dependency advisory titles cannot substitute Semgrep for required OSV cove
   }
 });
 
+test('dependency category correction preserves historical runtime finding identity', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const context = { projectId: 'runtime-history', projectPath: '/tmp/runtime-history', runId: 'old-run' };
+  const raw = adaptScannerOutput('nuclei', JSON.stringify({ 'template-id': 'synthetic-sql-injection', info: { name: 'SQL injection', severity: 'high' }, 'matched-at': 'http://127.0.0.1:3000/example' }), context)[0];
+  const legacyRaw = createFinding({ ...raw, category: 'INJECTION', id: undefined, fingerprint: undefined }, context);
+  assert.equal(raw.category, legacyRaw.category);
+  assert.equal(raw.fingerprint, legacyRaw.fingerprint);
+  const legacy = reconcileFindings([], [legacyRaw], context).findings[0];
+  legacy.status = 'FIXED';
+  const tools = { nuclei: { status: 'PASS', decision: 'RUN', parseValid: true, version: '3.11.1' } };
+  const next = reconcileFindings([legacy], [raw], { ...context, tools, verificationScopeValid: true }).findings;
+  assert.equal(next.length, 1);
+  assert.equal(next[0].id, legacy.id);
+  assert.equal(next[0].status, 'OPEN');
+  assert.equal(verificationOutcome({ finding: legacy, updatedFinding: next[0], coverage: { complete: true, results: [] } }).verification, 'STILL_DETECTED');
+});
+
 test('legacy dependency categories preserve finding identity and never verify a still-detected advisory', () => {
   const { adaptScannerOutput } = require('../core/findings');
   const { compareEvidence } = require('../core/correlation/correlation-key');
@@ -115,6 +143,20 @@ test('legacy dependency categories preserve finding identity and never verify a 
   }
   const clean = reconcileFindings([{ ...legacy, status: 'FIXED' }], [], { ...context, tools, verificationScopeValid: true });
   assert.equal(clean.findings[0].status, 'VERIFIED');
+});
+
+test('legacy OSV advisory IDs retain dependency coverage and still-detected identity', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const context = { projectId: 'legacy-osv', projectPath: '/tmp/legacy-osv', runId: 'old-run' };
+  const raw = adaptScannerOutput('osv-scanner', JSON.stringify({ results: [{ source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version: '1.0.0' }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] }] }), context)[0];
+  const oldRaw = createFinding({ ...raw, category: 'INJECTION', id: undefined, fingerprint: undefined }, context);
+  const legacy = reconcileFindings([], [oldRaw], context).findings[0];
+  legacy.status = 'FIXED';
+  assert.deepEqual(verificationPlan(legacy).relevantScanners.sort(), ['osv-scanner', 'trivy']);
+  const next = reconcileFindings([legacy], [raw], { ...context, verificationScopeValid: true }).findings;
+  assert.equal(next.length, 1);
+  assert.equal(next[0].id, legacy.id);
+  assert.equal(next[0].status, 'OPEN');
 });
 
 test('targeted verification integration verifies a fixed finding with only the relevant fake scanner', () => {
@@ -151,5 +193,12 @@ test('targeted verification integration verifies a fixed finding with only the r
   assert.deepEqual(result.scanners, ['semgrep']);
   const persisted = JSON.parse(fs.readFileSync(path.join(data, 'projects', identity.id, 'findings-index.json'), 'utf8'));
   assert.equal(persisted.findings[0].status, 'VERIFIED');
+  for (const invalid of ['null', '{}', '[]']) {
+    fs.writeFileSync(path.join(data, 'projects', identity.id, 'findings-index.json'), JSON.stringify({ schemaVersion: '1.0', projectId: identity.id, findings: [initial] }));
+    fs.writeFileSync(fakeSemgrep, '#!/bin/sh\nif [ "$1" = "--version" ]; then printf \'1.2.3\\n\'; else printf \'%s\\n\' \'' + invalid + '\'; fi\n');
+    const rejected = JSON.parse(execFileSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SECURITY_TOOLKIT_HOME: toolkit, SECURITY_DASHBOARD_DATA_DIR: data, SECURITY_TOOL_BINARIES: JSON.stringify({ semgrep: fakeSemgrep }) } }));
+    assert.equal(rejected.verification, 'VERIFICATION_INCOMPLETE');
+    assert.notEqual(rejected.lifecycle, 'VERIFIED');
+  }
   fs.rmSync(root, { recursive: true, force: true });
 });

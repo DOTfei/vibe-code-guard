@@ -48,6 +48,8 @@ function runProcess(binary, args, env, timeoutMs = 45000, cwd = ROOT) {
     child.stderr.on('data', (bytes) => append('stderr', bytes));
     child.on('error', (value) => { error = value.message; });
     child.on('close', (code, signal) => {
+      // A parent may exit on TERM while its same-group descendants ignore it.
+      if (timedOut || overflow) kill(child, 'SIGKILL');
       clearTimeout(timer); clearTimeout(escalation); active.delete(child);
       resolve({ binary, args, exitCode: code, signal, durationMs: Date.now() - started, timedOut, overflow, error, stdout, stderr });
     });
@@ -135,8 +137,11 @@ async function chainWorker(kind, project) {
     const scanner = kind === 'static' ? 'semgrep' : kind === 'container' ? 'checkov' : kind === 'dependencies' ? 'trivy' : 'gitleaks';
     const candidates = run.correlatedFindings.filter((item) => item.observations.some((o) => o.scanner === scanner));
     const finding = kind === 'dependencies' ? candidates.find((item) => /CVE-2021-23337/.test(JSON.stringify(item))) : candidates[0];
+    if (Object.values(run.tools).some(tool => tool.parseValid === false && [0, 1].includes(tool.exitCode))) return { status: 'REAL_PARTIAL', failure: true, reason: 'Scanner returned invalid structured output.', tools: run.tools, initialRunId: run.id };
     if (!finding) return { status: run.tools[scanner].status === 'PASS' ? 'REAL_PARTIAL' : 'BLOCKED_BY_ENVIRONMENT', failure: run.tools[scanner].status === 'PASS', reason: 'Expected initial finding was unavailable.', tools: run.tools, initialRunId: run.id };
     if (kind === 'dependencies' && ['trivy', 'osv-scanner'].some((id) => run.tools[id].status !== 'PASS')) return { status: 'BLOCKED_BY_ENVIRONMENT', reason: 'Both dependency scanners must execute before a dependency remediation chain can be claimed.', tools: run.tools, initialRunId: run.id };
+    const required = require('../core/verification').verificationPlan(finding).relevantScanners;
+    if (required.some(id => run.tools[id].status !== 'PASS' || !run.tools[id].version)) return { status: 'BLOCKED_BY_ENVIRONMENT', reason: 'Required scanner execution or known version is unavailable for this remediation chain.', tools: run.tools, initialRunId: run.id };
     const initialVersions = Object.fromEntries(Object.entries(run.tools).map(([id, tool]) => [id, tool.version]));
     const file = path.join(project, kind === 'container' ? 'Dockerfile' : kind === 'static' ? 'src/routes/auth.js' : kind === 'dependencies' ? 'package-lock.json' : 'src/config.js');
     const original = fs.readFileSync(file, 'utf8');

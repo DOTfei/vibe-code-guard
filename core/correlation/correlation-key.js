@@ -155,7 +155,7 @@ function compareEvidence(leftInput, rightInput, context = {}) {
     // Preserve historical dependency IDs after correcting title-based categories.
     const sameDependency = left.scannerId === right.scannerId && ['trivy', 'osv-scanner'].includes(left.scannerId)
       && [left.category, right.category].includes('DEPENDENCY_VULNERABILITY')
-      && /^(?:cve-|ghsa-|osv-)/i.test(left.ruleId) && left.ruleId === right.ruleId
+      && left.ruleId && left.ruleId === right.ruleId
       && left.identity.file && left.identity.file === right.identity.file
       && left.identity.packageName && left.identity.packageName === right.identity.packageName
       && left.identity.installedVersion && left.identity.installedVersion === right.identity.installedVersion
