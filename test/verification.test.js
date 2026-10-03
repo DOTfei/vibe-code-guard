@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { execFileSync } = require('node:child_process');
+const { execFileSync, spawnSync } = require('node:child_process');
 const test = require('node:test');
 
 const { createFinding } = require('../core/findings');
@@ -21,6 +21,10 @@ test('all scanner output boundaries reject invalid shapes while preserving clean
     for (const invalid of ['null', '{}', 'true', '42', '"text"', '[null]', '[{}]']) assert.equal(validator(tool, invalid).valid, false, `${tool}: ${invalid}`);
   }
   for (const [tool, report] of [
+    ['gitleaks', '[{"RuleID":"synthetic"}]'], ['gitleaks', '[{"RuleID":"synthetic","File":" "}]'],
+    ['trufflehog', '{"DetectorName":"synthetic"}'], ['semgrep', '{"results":[{"check_id":"synthetic"}]}'],
+    ['checkov', '{"results":{"failed_checks":[{"check_id":"synthetic"}]}}'],
+    ['nuclei', '{"template-id":"synthetic","info":{}}'], ['zap', '{"alerts":[{"pluginid":"synthetic"}]}'],
     ['trufflehog', '{"DetectorName":"synthetic"}\nnull'], ['nuclei', '{"template-id":"synthetic","info":{}}\n{}'],
     ['gitleaks', '[{"RuleID":"synthetic"},null]'], ['checkov', '{"results":{"failed_checks":[{}]}}'],
     ['zap', '{"alerts":[{}]}'], ['zap', '{"site":[{"alerts":[]},{"alerts":[{"pluginid":"synthetic"}]}]}'],
@@ -29,12 +33,14 @@ test('all scanner output boundaries reject invalid shapes while preserving clean
     ['trivy', '{"Results":[{}]}'], ['trivy', '{"Results":[{"Target":"package-lock.json","Vulnerabilities":[{}]}]}'],
     ['osv-scanner', '{"results":[{}]}'], ['osv-scanner', '{"results":[{"packages":[null]}]}'],
     ['osv-scanner', '{"results":[{"packages":[{"package":{},"vulnerabilities":[{}]}]}]}'],
+    ['osv-scanner', '{"results":[{"packages":[{"package":{"name":"synthetic","version":"1"},"vulnerabilities":[{"id":"PYSEC-2026-123"}]}]}]}'],
   ]) assert.equal(validator(tool, report).valid, false, `${tool}: ${report}`);
   assert.equal(validator('zap', '{"alerts":[]}').valid, true);
   for (const [tool, report] of [
-    ['gitleaks', '[{"RuleID":"synthetic"}]'], ['trufflehog', '{"DetectorName":"synthetic"}'],
-    ['nuclei', '{"template-id":"synthetic","info":{"name":"Safe fixture"}}'],
-    ['checkov', '{"results":{"failed_checks":[{"check_id":"synthetic"}]}}'], ['zap', '{"alerts":[{"pluginid":"synthetic"}]}'],
+    ['gitleaks', '[{"RuleID":"synthetic","File":"src/config.js"}]'], ['trufflehog', '{"DetectorName":"synthetic","SourceMetadata":{"Data":{"Filesystem":{"file":"src/config.js"}}}}'],
+    ['nuclei', '{"template-id":"synthetic","info":{"name":"Safe fixture"},"matched-at":"http://127.0.0.1:3000"}'],
+    ['checkov', '{"results":{"failed_checks":[{"check_id":"synthetic","file_path":"/Dockerfile"}]}}'], ['zap', '{"alerts":[{"pluginid":"synthetic","url":"http://127.0.0.1:3000"}]}'],
+    ['osv-scanner', '{"results":[{"source":{"path":"requirements.txt"},"packages":[{"package":{"name":"synthetic","version":"1"},"vulnerabilities":[{"id":"PYSEC-2026-123"}]}]}]}'],
   ]) assert.equal(validator(tool, report).valid, true, `${tool}: ${report}`);
 });
 
@@ -53,7 +59,7 @@ test('malformed secret reports cannot verify an unchanged finding through canoni
     initial.findings.find(f => f.id === finding.id).status = 'FIXED';
     const verify = `const {verifyFinding}=require(${server});verifyFinding({projectPath:${JSON.stringify(project)},findingId:${JSON.stringify(finding.id)}}).then(r=>console.log(JSON.stringify({verification:r.verification.verification,status:r.finding.status})));`;
     for (const tool of ['gitleaks', 'trufflehog']) {
-      for (const invalid of ['null', '{}', '[null]']) {
+      for (const invalid of ['null', '{}', '[null]', tool === 'gitleaks' ? '[{"RuleID":"synthetic-acceptance"}]' : '{"DetectorName":"synthetic"}']) {
         fs.writeFileSync(indexFile, JSON.stringify(initial));
         for (const scanner of ['gitleaks', 'trufflehog']) {
           const output = scanner === tool ? invalid : scanner === 'gitleaks' ? '[]' : '';
@@ -76,6 +82,100 @@ function syntheticGroup(category = 'INJECTION', scanner = 'semgrep') {
   const raw = createFinding({ scanner: { id: scanner, name: scanner, ruleId: 'synthetic.rule' }, severity: 'HIGH', category, title: 'Synthetic issue', location: { type: 'file', file: 'src/app.js', line: 5 }, evidence: 'Safe synthetic evidence.' }, context);
   return reconcileFindings([], [raw], context).findings[0];
 }
+
+test('mixed historical dependency and secret evidence retains both scanner families', () => {
+  const finding = { ...syntheticGroup('SECRET_EXPOSURE', 'gitleaks'), scopeFingerprint: 'unchanged' };
+  finding.observations.push({ scanner: 'trivy', ruleId: 'CVE-2026-1234', identity: { kind: 'secret', packageName: 'synthetic-package', installedVersion: '1' } });
+  const plan = verificationPlan(finding);
+  assert.deepEqual(plan.relevantScanners.sort(), ['gitleaks', 'osv-scanner', 'trivy', 'trufflehog']);
+  const tools = Object.fromEntries(['gitleaks', 'osv-scanner', 'trivy'].map(id => [id, { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.0.0' }]));
+  tools.trufflehog = { status: 'MISSING', parseValid: false, version: null };
+  const coverage = verificationCoverage(plan, tools, { currentScopeFingerprint: 'unchanged' });
+  assert.equal(coverage.complete, false);
+  assert.equal(verificationOutcome({ finding, updatedFinding: finding, coverage }).verification, 'VERIFICATION_INCOMPLETE');
+});
+
+test('short and non-semver dependency identity survives normalization and historical migration', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const { normalizePersistedFinding } = require('../core/findings/schema');
+  for (const version of ['1', '1.0rc1', '2026.10.post1']) {
+    const context = { projectId: 'short-version', projectPath: '/tmp/short-version', runId: 'old' };
+    const raw = adaptScannerOutput('osv-scanner', JSON.stringify({ results: [{ source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] }] }), context)[0];
+    assert.equal(normalizePersistedFinding(raw, context).correlationMetadata.installedVersion, version);
+    const legacy = reconcileFindings([], [createFinding({ ...raw, category: 'INJECTION', fingerprint: undefined, id: undefined }, context)], context).findings[0];
+    legacy.status = 'FIXED';
+    const next = reconcileFindings([legacy], [raw], { ...context, verificationScopeValid: true });
+    assert.equal(next.findings.length, 1);
+    assert.equal(next.findings[0].id, legacy.id);
+    assert.equal(next.findings[0].status, 'OPEN');
+  }
+});
+
+test('ambiguous legacy dependency identity defers verification instead of proving absence', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const context = { projectId: 'ambiguous-history', projectPath: '/tmp/ambiguous-history', runId: 'old' };
+  const raw = adaptScannerOutput('osv-scanner', JSON.stringify({ results: [{ source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version: '1' }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] }] }), context)[0];
+  const old = createFinding({ ...raw, correlationMetadata: undefined, category: 'INJECTION', fingerprint: undefined, id: undefined }, context);
+  const legacy = reconcileFindings([], [old], context).findings[0];
+  legacy.status = 'FIXED';
+  const tools = Object.fromEntries(['trivy', 'osv-scanner'].map(id => [id, { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.0.0' }]));
+  const next = reconcileFindings([legacy], [raw], { ...context, tools, verificationScopeValid: true });
+  assert.equal(next.findings.find(item => item.id === legacy.id).status, 'FIXED');
+  assert.deepEqual(next.incompleteFindingIds, [legacy.id]);
+  assert.ok(next.findings.some(item => item.id !== legacy.id && item.status === 'OPEN'));
+});
+
+test('targeted verification persists unmatched evidence and reports ambiguous history as incomplete', () => {
+  const { createMockToolchain, copyFixture } = require('./e2e/harness');
+  const report = { source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version: '1' }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] };
+  const tools = createMockToolchain({ findings: { 'osv-scanner': [report] } });
+  const project = fs.realpathSync(copyFixture('node-api'));
+  try {
+    fs.writeFileSync(path.join(project, 'requirements.txt'), 'synthetic-package==1\n');
+    const server = JSON.stringify(path.join(ROOT, 'server'));
+    const invoke = code => JSON.parse(execFileSync(process.execPath, ['-e', code], { env: tools.env, encoding: 'utf8', timeout: 30000 }));
+    invoke(`const {createRun,runAudit}=require(${server});const run=createRun({projectPath:${JSON.stringify(project)},mode:'auto',webTarget:null});runAudit(run).then(()=>console.log(JSON.stringify({ok:true})));`);
+    const indexFile = path.join(tools.dataDir, 'projects', projectIdentity(project).id, 'findings-index.json');
+    const index = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+    const legacy = index.findings.find(f => f.observations.some(o => o.scanner === 'osv-scanner'));
+    legacy.id = 'VCG-CORR-00000000000001';
+    legacy.category = 'INJECTION';
+    legacy.status = 'FIXED';
+    for (const observation of legacy.observations) {
+      observation.category = 'INJECTION';
+      observation.fingerprint = 'legacy-fingerprint';
+      observation.identity = { ...observation.identity, kind: 'static', packageName: null, installedVersion: null, vulnerabilityId: null };
+    }
+    const unrelated = JSON.parse(JSON.stringify(legacy));
+    unrelated.id = 'VCG-CORR-00000000000002';
+    unrelated.observations.forEach(o => { o.ruleId = 'PYSEC-2026-999'; });
+    index.findings.push(unrelated);
+    fs.writeFileSync(indexFile, JSON.stringify(index));
+    const result = invoke(`const {verifyFinding,hydrateRun}=require(${server});verifyFinding({projectPath:${JSON.stringify(project)},findingId:${JSON.stringify(legacy.id)}}).then(r=>console.log(JSON.stringify({verification:r.verification,findings:r.run.correlatedFindings,stored:hydrateRun(r.run.id).verification})));`);
+    assert.equal(result.verification.verification, 'VERIFICATION_INCOMPLETE');
+    assert.equal(result.verification.coverage.complete, false);
+    assert.deepEqual(result.stored, result.verification);
+    const persisted = JSON.parse(fs.readFileSync(indexFile, 'utf8')).findings;
+    assert.deepEqual(result.findings, persisted);
+    assert.equal(persisted.find(f => f.id === legacy.id).status, 'FIXED');
+    assert.equal(persisted.find(f => f.id === unrelated.id).status, 'FIXED');
+    assert.ok(persisted.some(f => f.id !== legacy.id && f.status === 'OPEN'));
+    const cli = spawnSync(process.execPath, [path.join(ROOT, 'bin/vibe-code-guard.js'), 'verify', legacy.id, project, '--json'], { env: tools.env, encoding: 'utf8', timeout: 30000 });
+    assert.equal(cli.status, 2, cli.stderr);
+    const cliResult = JSON.parse(cli.stdout);
+    assert.equal(cliResult.verification, 'VERIFICATION_INCOMPLETE');
+    const repeat = invoke(`const run=require(${server}).hydrateRun(${JSON.stringify(cliResult.runId)});console.log(JSON.stringify({verification:run.verification,findings:run.correlatedFindings}));`);
+    assert.equal(repeat.verification.verification, cliResult.verification);
+    assert.equal(repeat.findings.find(f => f.id === legacy.id).status, cliResult.lifecycle);
+    assert.equal(repeat.verification.verification, 'VERIFICATION_INCOMPLETE');
+    assert.equal(repeat.findings.length, persisted.length);
+    const newFinding = persisted.find(f => f.status === 'OPEN');
+    assert.ok(repeat.findings.find(f => f.id === newFinding.id).observations.length > newFinding.observations.length);
+  } finally {
+    fs.rmSync(tools.root, { recursive: true, force: true });
+    fs.rmSync(path.dirname(project), { recursive: true, force: true });
+  }
+});
 
 test('targeted verification maps scanner families and rejects missing runtime scope', () => {
   const staticFinding = syntheticGroup('INJECTION', 'semgrep');

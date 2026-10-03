@@ -157,6 +157,7 @@ function reconcileFindings(existingFindings, findings, context = {}) {
   const current = correlateFindings(findings, context);
   const next = (Array.isArray(existingFindings) ? existingFindings : []).map((finding) => JSON.parse(JSON.stringify(finding)));
   const matched = new Set();
+  const incompleteFindingIds = [];
   for (const currentGroup of current.findings) {
     let best = null;
     for (const existing of next) {
@@ -176,10 +177,14 @@ function reconcileFindings(existingFindings, findings, context = {}) {
   }
   for (const finding of next) {
     if (matched.has(finding.id) || current.findings.some((item) => item.id === finding.id)) continue;
-    const eligible = isVerificationEligible(finding, context);
+    const uncertainMatch = current.findings.some(group => group.observations.some(observation =>
+      (finding.observations || []).some(old => compareEvidence(observation, old, context) === 'MEDIUM')));
+    const eligible = !uncertainMatch && (!context.verificationFindingId || context.verificationFindingId === finding.id)
+      && isVerificationEligible(finding, context);
+    if (uncertainMatch) incompleteFindingIds.push(finding.id);
     automaticLifecycle(finding, { observed: false, verificationEligible: eligible, runId: context.runId, timestamp: context.observedAt, reason: eligible ? 'Relevant scanner coverage completed without a matching observation.' : 'Verification deferred because relevant scanner coverage was incomplete.' });
   }
-  return { findings: next, currentFindings: current.findings, suggestions: current.suggestions };
+  return { findings: next, currentFindings: current.findings, suggestions: current.suggestions, incompleteFindingIds };
 }
 
 function countCorrelatedFindings(findings) {

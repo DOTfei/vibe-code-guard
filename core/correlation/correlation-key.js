@@ -160,7 +160,13 @@ function compareEvidence(leftInput, rightInput, context = {}) {
       && left.identity.packageName && left.identity.packageName === right.identity.packageName
       && left.identity.installedVersion && left.identity.installedVersion === right.identity.installedVersion
       && (left.identity.ecosystem || inferEcosystem({}, left.identity.file)) === (right.identity.ecosystem || inferEcosystem({}, right.identity.file));
-    return sameDependency ? 'HIGH' : 'NONE';
+    if (sameDependency) return 'HIGH';
+    // An incomplete legacy identity is uncertainty, not proof of absence.
+    const uncertainDependency = left.scannerId === right.scannerId && ['trivy', 'osv-scanner'].includes(left.scannerId)
+      && [left.category, right.category].includes('DEPENDENCY_VULNERABILITY')
+      && left.ruleId && left.ruleId === right.ruleId && left.identity.file && left.identity.file === right.identity.file
+      && (!left.identity.packageName || !right.identity.packageName || !left.identity.installedVersion || !right.identity.installedVersion);
+    return uncertainDependency ? 'MEDIUM' : 'NONE';
   }
   if (left.identity.kind === 'dependency' && right.identity.kind === 'dependency') {
     const ecosystemMatches = !left.identity.ecosystem || !right.identity.ecosystem || left.identity.ecosystem === right.identity.ecosystem;

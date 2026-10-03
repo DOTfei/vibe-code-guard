@@ -76,6 +76,9 @@ function createFinding(input = {}, context = {}) {
     category,
     title,
     location,
+    ...(input.correlationMetadata ? { correlationMetadata: Object.fromEntries(
+      ['packageName', 'installedVersion', 'vulnerabilityId', 'ecosystem'].map(key => [key, sanitizeText(input.correlationMetadata[key] || '') || null])
+    ) } : {}),
     explanation: {
       technical: sanitizeText(input.explanation?.technical || input.technical || title),
       simple: sanitizeText(input.explanation?.simple || input.simple || 'This scanner reported a security signal that needs review.'),

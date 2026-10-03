@@ -64,10 +64,16 @@ function projectScopeFingerprint(projectPath, targetFile = null, runtimeTarget =
 }
 
 function familyForFinding(finding) {
+  const observations = finding?.observations || [];
   // Historical dependency findings may have been misclassified from advisory titles.
-  if ((finding?.observations || []).some((item) => item.scanner === 'osv-scanner'
+  if (observations.some((item) => item.scanner === 'osv-scanner'
     || (item.scanner === 'trivy' && item.ruleId && (item.identity?.packageName && item.identity?.installedVersion
-      || /^(?:CVE-|GHSA-|OSV-)/i.test(item.ruleId))))) return SCANNER_FAMILIES.DEPENDENCY_VULNERABILITY;
+      || /^(?:CVE-|GHSA-|OSV-)/i.test(item.ruleId))))) {
+    // Correct a dependency-only legacy category, not independent secret evidence.
+    const secretEvidence = observations.some(item => ['gitleaks', 'trufflehog'].includes(item.scanner)
+      || (item.scanner === 'trivy' && item.identity?.kind === 'secret' && !/^(?:CVE-|GHSA-|OSV-)/i.test(item.ruleId || '')));
+    return [...new Set([...SCANNER_FAMILIES.DEPENDENCY_VULNERABILITY, ...(secretEvidence ? SCANNER_FAMILIES.SECRET_EXPOSURE : [])])];
+  }
   const category = String(finding?.category || '').toUpperCase().replaceAll(' ', '_');
   if (SCANNER_FAMILIES[category]) return SCANNER_FAMILIES[category];
   return [...new Set((finding?.observations || []).map((item) => item.scanner).filter((item) => KNOWN_SCANNERS.has(item)))];
