@@ -16,6 +16,9 @@ const CATEGORIES = Object.freeze([
 ]);
 
 function normalizeCategory(value, hints = '') {
+  const explicit = String(value || '').trim().toUpperCase();
+  // Correct dependency titles without changing other historical fingerprints.
+  if (explicit === 'DEPENDENCY_VULNERABILITY') return explicit;
   const raw = `${value || ''} ${hints || ''}`.trim().toUpperCase();
   if (CATEGORIES.includes(raw)) return raw;
   const text = raw.replace(/[_-]+/g, ' ');

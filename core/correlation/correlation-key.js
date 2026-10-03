@@ -56,7 +56,8 @@ function extractPackageVersion(finding, values) {
   const explicit = finding.installedVersion || finding.version || finding.metadata?.installedVersion || finding.correlationMetadata?.installedVersion;
   if (explicit) return normalizeText(explicit);
   const text = values.filter(Boolean).join(' ');
-  const versioned = text.match(/\b(?:[@a-z0-9][a-z0-9._/@-]*)\s+v?(\d+\.\d+(?:\.\d+)?)\b/i);
+  // Consume the complete token; a numeric prefix is not a package version.
+  const versioned = text.match(/\b(?:[@a-z0-9][a-z0-9._/@-]*)\s+v?(\d[0-9a-z.+!_~:-]*)(?=\s|$|[,;)])/i);
   return versioned ? normalizeText(versioned[1]) : null;
 }
 
@@ -151,7 +152,28 @@ function compareEvidence(leftInput, rightInput, context = {}) {
   const left = comparable(leftInput, context);
   const right = comparable(rightInput, context);
   if (left.scannerId === right.scannerId && left.fingerprint && left.fingerprint === right.fingerprint) return 'EXACT';
-  if (left.category !== right.category) return 'NONE';
+  if (left.category !== right.category) {
+    // Preserve historical dependency IDs after correcting title-based categories.
+    const sameDependency = left.scannerId === right.scannerId && ['trivy', 'osv-scanner'].includes(left.scannerId)
+      && [left.category, right.category].includes('DEPENDENCY_VULNERABILITY')
+      && left.ruleId && left.ruleId === right.ruleId
+      && left.identity.file && left.identity.file === right.identity.file
+      && left.identity.packageName && left.identity.packageName === right.identity.packageName
+      && left.identity.installedVersion && left.identity.installedVersion === right.identity.installedVersion
+      && (left.identity.ecosystem || inferEcosystem({}, left.identity.file)) === (right.identity.ecosystem || inferEcosystem({}, right.identity.file));
+    if (sameDependency) return 'HIGH';
+    // An incomplete legacy identity is uncertainty, not proof of absence.
+    const truncatedVersion = (short, full) => typeof short === 'string' && typeof full === 'string'
+      && /^\d+\.\d+(?:\.\d+)?$/.test(short) && full.startsWith(short) && /^[^\w]/.test(full.slice(short.length));
+    const legacyVersionUncertain = truncatedVersion(left.identity.installedVersion, right.identity.installedVersion)
+      || truncatedVersion(right.identity.installedVersion, left.identity.installedVersion);
+    const uncertainDependency = left.scannerId === right.scannerId && ['trivy', 'osv-scanner'].includes(left.scannerId)
+      && [left.category, right.category].includes('DEPENDENCY_VULNERABILITY')
+      && left.ruleId && left.ruleId === right.ruleId && left.identity.file && left.identity.file === right.identity.file
+      && (!left.identity.packageName || !right.identity.packageName || !left.identity.installedVersion || !right.identity.installedVersion
+        || left.identity.packageName === right.identity.packageName && legacyVersionUncertain);
+    return uncertainDependency ? 'MEDIUM' : 'NONE';
+  }
   if (left.identity.kind === 'dependency' && right.identity.kind === 'dependency') {
     const ecosystemMatches = !left.identity.ecosystem || !right.identity.ecosystem || left.identity.ecosystem === right.identity.ecosystem;
     const versionMatches = !left.identity.installedVersion || !right.identity.installedVersion || left.identity.installedVersion === right.identity.installedVersion;

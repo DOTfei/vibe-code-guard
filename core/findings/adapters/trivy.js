@@ -9,6 +9,7 @@ function parseTrivy(text, context) {
       scanner: { id: 'trivy', name: 'Trivy', ruleId: item.VulnerabilityID },
       severity: item.Severity,
       category: 'DEPENDENCY_VULNERABILITY',
+      correlationMetadata: { packageName: item.PkgName, installedVersion: item.InstalledVersion, vulnerabilityId: item.VulnerabilityID },
       title: `${item.VulnerabilityID || 'Vulnerability'}: ${item.Title || item.PkgName || 'vulnerable dependency'}`,
       location: { type: 'file', file: result.Target || item.PkgName || 'dependency manifest' },
       explanation: {

@@ -493,6 +493,14 @@ function semgrepArgs(projectPath) {
   return ['scan', '--config=p/security-audit', projectPath, '--json'];
 }
 
+function trufflehogArgs(projectPath) {
+  return ['filesystem', projectPath, '--no-verification', '--no-update', '--no-color', '--json'];
+}
+
+function nucleiArgs(target) {
+  return ['-u', target, '-tags', 'tech', '-jsonl', '-silent', '-no-interactsh', '-disable-update-check'];
+}
+
 function updateToolVersion(tool) {
   const commands = {
     gitleaks: ['version'],
@@ -529,16 +537,40 @@ function updateToolVersion(tool) {
 
 function validateScannerOutput(tool, text) {
   const value = String(text || '').trim();
+  const object = (item) => item !== null && typeof item === 'object' && !Array.isArray(item);
+  const records = (items, field) => Array.isArray(items) && items.every(item => object(item) && typeof item[field] === 'string' && item[field].trim());
   const jsonLines = new Set(['trufflehog', 'nuclei']);
   if (jsonLines.has(tool)) {
     if (!value) return { valid: true };
     const invalid = value.split('\n').some((line) => {
-      try { JSON.parse(line); return false; } catch { return true; }
+      try {
+        const item = JSON.parse(line);
+        return tool === 'trufflehog' ? !records([item], 'DetectorName') || !records([item.SourceMetadata?.Data?.Filesystem], 'file')
+          : !records([item], 'template-id') || !object(item.info) || ![item['matched-at'], item.host].some(value => typeof value === 'string' && /^https?:\/\//.test(value));
+      } catch { return true; }
     });
     return invalid ? { valid: false, reason: `${tool} emitted malformed JSONL output.` } : { valid: true };
   }
   if (!value) return { valid: false, reason: `${tool} emitted no structured output.` };
-  try { JSON.parse(value); return { valid: true }; } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
+  try {
+    const data = JSON.parse(value);
+    if (tool === 'gitleaks' && (!records(data, 'RuleID') || !records(data, 'File'))) return { valid: false, reason: `${tool} emitted an invalid finding array or missing file location.` };
+    if (tool === 'checkov' && (!object(data) || !object(data.results) || !records(data.results.failed_checks, 'check_id') || !records(data.results.failed_checks, 'file_path'))) return { valid: false, reason: `${tool} emitted an invalid failed-check array or missing file location.` };
+    if (tool === 'zap') {
+      if (object(data) && Object.hasOwn(data, 'alerts') && Object.hasOwn(data, 'site')) return { valid: false, reason: `${tool} emitted ambiguous alert containers.` };
+      const alerts = object(data) && (Array.isArray(data.alerts) ? data.alerts : Array.isArray(data.site) && data.site.length === 1 && object(data.site[0]) ? data.site[0].alerts : null);
+      // The adapter supports one site. Never discard unsupported sites as an empty report.
+      if (!Array.isArray(alerts) || !alerts.every(item => object(item) && ['pluginid', 'alertRef', 'id'].some(key => typeof item[key] === 'string' && item[key].trim()) && [item.url, item.uri, item['matched-at'], item.instances?.[0]?.uri].some(value => typeof value === 'string' && /^https?:\/\//.test(value)))) return { valid: false, reason: `${tool} emitted an invalid or unsupported alert report.` };
+    }
+    const resultKey = tool === 'trivy' ? 'Results' : ['semgrep', 'osv-scanner'].includes(tool) ? 'results' : null;
+    if (resultKey && (!data || Array.isArray(data) || !Array.isArray(data[resultKey]))) return { valid: false, reason: `${tool} emitted an invalid structured result array.` };
+    if (tool === 'semgrep' && (!records(data.results, 'check_id') || !records(data.results, 'path'))) return { valid: false, reason: `${tool} emitted invalid finding records or missing file location.` };
+    if (tool === 'trivy' && !data.Results.every(result => records([result], 'Target') && [['Vulnerabilities', 'VulnerabilityID'], ['Misconfigurations', 'ID'], ['Secrets', 'RuleID']].every(([key, field]) => result[key] == null || records(result[key], field)))) return { valid: false, reason: `${tool} emitted invalid nested result records.` };
+    if (tool === 'osv-scanner' && !data.results.every(result => object(result) && Array.isArray(result.packages) && result.packages.every(pkg => object(pkg) && object(pkg.package) && (pkg.vulnerabilities == null || records(pkg.vulnerabilities, 'id'))))) return { valid: false, reason: `${tool} emitted invalid package/advisory records.` };
+    if (tool === 'osv-scanner' && !data.results.every(result => result.packages.every(pkg => !pkg.vulnerabilities?.length
+      || records([result.source], 'path') && records([pkg.package], 'name') && records([pkg.package], 'version')))) return { valid: false, reason: `${tool} emitted dependency findings with incomplete identity or location.` };
+    return { valid: true };
+  } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
 }
 
 function runtimeTargetReachable(target, timeoutMs = 3000) {
@@ -642,12 +674,12 @@ function targetedScannerSpec(tool, run, finding = null) {
   const trivyScanner = ['CONFIGURATION', 'INFRASTRUCTURE', 'MISCONFIGURATION'].includes(category) ? 'config' : 'vuln';
   const specs = {
     gitleaks: { stage: 'rescan', args: gitleaksArgs(run.projectPath, report('gitleaks-report.json')), outputName: 'gitleaks-output.txt', reportPath: report('gitleaks-report.json') },
-    trufflehog: { stage: 'rescan', args: ['filesystem', run.projectPath, '--no-verification', '--no-update', '--no-color', '--json'], outputName: 'trufflehog-output.jsonl' },
+    trufflehog: { stage: 'rescan', args: trufflehogArgs(run.projectPath), outputName: 'trufflehog-output.jsonl' },
     semgrep: { stage: 'rescan', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json' },
     'osv-scanner': { stage: 'rescan', args: ['scan', 'source', '--recursive', '--format', 'json', run.projectPath], outputName: 'osv-output.json' },
     trivy: { stage: 'rescan', args: ['fs', '--scanners', trivyScanner, '--skip-db-update', '--format', 'json', run.projectPath], outputName: 'trivy-output.json' },
     checkov: { stage: 'rescan', args: ['-d', run.projectPath, '--output', 'json'], outputName: 'checkov-output.json' },
-    nuclei: { stage: 'web', args: ['-u', run.webTarget, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl' },
+    nuclei: { stage: 'web', args: nucleiArgs(run.webTarget), outputName: 'nuclei-output.jsonl' },
     zap: { stage: 'web', args: ['-cmd', '-quickurl', run.webTarget, '-quickout', report('zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', reportPath: report('zap-report.json') },
   };
   return specs[tool] || null;
@@ -738,7 +770,7 @@ async function runTargetedVerification(run) {
   skipStage(run, 'fix', 'The external coding agent owns code changes; Vibe Code Guard only verifies them.');
   const current = readProjectIndex(located.project.id);
   const existing = current.findings.find((item) => item.id === run.verification.findingId);
-  const reconciled = reconcileFindings([existing], run.findings, {
+  const reconciled = reconcileFindings(current.findings, run.findings, {
     projectId: located.project.id,
     projectPath: run.projectPath,
     runId: run.id,
@@ -748,9 +780,15 @@ async function runTargetedVerification(run) {
     stages: run.stages,
     webTarget: run.webTarget,
     verificationScopeValid: coverage.complete,
+    verificationFindingId: existing.id,
   });
-  const updatedFinding = reconciled.findings[0] || existing;
-  current.findings = current.findings.map((item) => item.id === run.verification.findingId ? updatedFinding : item);
+  const updatedFinding = reconciled.findings.find(item => item.id === existing.id) || existing;
+  if (reconciled.incompleteFindingIds.includes(existing.id)) {
+    coverage.complete = false;
+    coverage.reason = 'Current evidence overlaps the historical finding but its identity cannot be confirmed.';
+    stageFinish(run, 'rescan', 'FAIL', coverage.reason);
+  }
+  current.findings = reconciled.findings;
   saveProjectIndex(current);
   const outcome = verificationOutcome({ finding: existing, updatedFinding, coverage });
   run.verification = { ...run.verification, plan, coverage, initialScopeFingerprint, currentScopeFingerprint, scopeStableDuringScan: Boolean(stableScopeFingerprint), runtimeReachable, ...outcome, completedAt: isoNow() };
@@ -1060,7 +1098,7 @@ async function runPlannedAudit(run) {
 
   await executeStage('secrets', [
     { tool: 'gitleaks', args: gitleaksArgs(run.projectPath, path.join(run.dir, 'gitleaks-report.json')), outputName: 'gitleaks-output.txt', parser: null, reportPath: path.join(run.dir, 'gitleaks-report.json') },
-    { tool: 'trufflehog', args: ['filesystem', run.projectPath, '--no-verification', '--json'], outputName: 'trufflehog-output.jsonl', parser: null },
+    { tool: 'trufflehog', args: trufflehogArgs(run.projectPath), outputName: 'trufflehog-output.jsonl', parser: null },
   ]);
   await executeStage('static', [
     { tool: 'semgrep', args: semgrepArgs(run.projectPath), outputName: 'semgrep-output.json', parser: null },
@@ -1091,7 +1129,7 @@ async function runPlannedAudit(run) {
     if (!target) skipStage(run, 'web', 'The automatic plan selected runtime checks, but no authorized localhost target is available.');
     else {
       stageStart(run, 'web');
-      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'], outputName: 'nuclei-output.jsonl', parser: null });
+      if (webTools.includes('nuclei')) await executeScanner(run, { tool: 'nuclei', stage: 'web', args: nucleiArgs(target), outputName: 'nuclei-output.jsonl', parser: null });
       if (webTools.includes('zap')) {
         const zapPath = resolveBinary('zap');
         if (zapPath !== 'zap' && fs.existsSync(zapPath)) await executeScanner(run, { tool: 'zap', stage: 'web', args: ['-cmd', '-quickurl', target, '-quickout', path.join(run.dir, 'zap-report.json'), '-quickprogress'], outputName: 'zap-output.txt', parser: null, reportPath: path.join(run.dir, 'zap-report.json') });
@@ -1134,7 +1172,7 @@ async function runAudit(run) {
     });
     await executeScanner(run, {
       tool: 'trufflehog', stage: 'secrets',
-      args: ['filesystem', run.projectPath, '--no-verification', '--json'],
+      args: trufflehogArgs(run.projectPath),
       outputName: 'trufflehog-output.jsonl', parser: null,
     });
     stageFinish(run, 'secrets', [run.tools.gitleaks, run.tools.trufflehog].some((tool) => tool.status === 'ERROR' || tool.status === 'FAIL') ? 'FAIL' : 'PASS');
@@ -1180,7 +1218,7 @@ async function runAudit(run) {
       stageStart(run, 'web');
       await executeScanner(run, {
         tool: 'nuclei', stage: 'web',
-        args: ['-u', target, '-tags', 'tech', '-jsonl', '-silent'],
+        args: nucleiArgs(target),
         outputName: 'nuclei-output.jsonl', parser: null,
       });
       const zapPath = resolveBinary('zap');

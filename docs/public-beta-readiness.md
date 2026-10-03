@@ -159,11 +159,42 @@ See [`docs/agent-integration.md`](agent-integration.md),
 [`docs/installation.md`](installation.md), and
 [`docs/e2e-friction-log.md`](e2e-friction-log.md) for operational details.
 
-The v0.7.1 real-scanner run does not claim complete real-world proof. OSV
+The historical 2026-08-11 v0.7.1 real-scanner run does not claim complete real-world proof. OSV
 dependency intelligence is blocked by the current external network
 environment; the Trivy database is usable but expired; Semgrep's normal
 HOME/log path and ZAP content freshness remain environment-sensitive; and
 active ZAP/Nuclei finding detection was not completed.
+
+### Real-scanner follow-up (2026-10-02)
+
+The [real-scanner validation report](real-scanner-validation.md) records a
+separate manual follow-up using the four-state evidence vocabulary:
+`REAL_VALIDATED`, `REAL_PARTIAL`, `BLOCKED_BY_ENVIRONMENT`, `NOT_TESTED`.
+Real Gitleaks, local-rule Semgrep, Checkov + Trivy configuration, and
+Trivy + OSV selected-advisory remediation chains were exercised through VCG.
+Direct localhost Nuclei/ZAP detections were normalized, but their VCG
+runtime-family targeted verification remains `NOT_TESTED`. TruffleHog remains
+`REAL_PARTIAL` without a reliable synthetic detection; its own remediation
+chain is `NOT_TESTED`. Trivy's usable DB remains expired (`REAL_PARTIAL`).
+OSV queries succeeded in this follow-up, without changing the historical
+blocked record into a pass or claiming permanent network availability.
+The manual run therefore returns `2`, not full-validation `0`.
+No global tools or security content were upgraded/refreshed. These results
+do not establish all-eight full validation, complete real-world coverage,
+current global toolchain health, legal compliance, or bug-free software.
+
+The 2026-10-03 local post-review replay retained those evidence boundaries
+after repairing legacy-category matching, cancellation cleanup, Semgrep path
+isolation, and malformed dependency-output classification. The report links
+the separate dated capture; 103 mock/regression tests pass, and the manual
+real-scanner run remains exit 2, not full-validation exit 0.
+The final second-review guards preserve historical runtime categories and
+clean up timeout descendants. Their proof is synthetic regression coverage,
+not an additional real runtime-family verification claim.
+The canonical MISCONFIGURATION category also retains both Checkov and Trivy
+as required verification coverage, including single-scanner-origin findings.
+Opaque historical OSV advisory IDs, invalid dependency/static JSON roots,
+and missing-peer manual validation states are also covered by regressions.
 
 ## Dashboard and agent acceptance
 
