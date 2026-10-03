@@ -537,19 +537,36 @@ function updateToolVersion(tool) {
 
 function validateScannerOutput(tool, text) {
   const value = String(text || '').trim();
+  const object = (item) => item !== null && typeof item === 'object' && !Array.isArray(item);
+  const records = (items, field) => Array.isArray(items) && items.every(item => object(item) && typeof item[field] === 'string' && item[field].trim());
   const jsonLines = new Set(['trufflehog', 'nuclei']);
   if (jsonLines.has(tool)) {
     if (!value) return { valid: true };
     const invalid = value.split('\n').some((line) => {
-      try { JSON.parse(line); return false; } catch { return true; }
+      try {
+        const item = JSON.parse(line);
+        return tool === 'trufflehog' ? !records([item], 'DetectorName')
+          : !records([item], 'template-id') || !object(item.info);
+      } catch { return true; }
     });
     return invalid ? { valid: false, reason: `${tool} emitted malformed JSONL output.` } : { valid: true };
   }
   if (!value) return { valid: false, reason: `${tool} emitted no structured output.` };
   try {
     const data = JSON.parse(value);
+    if (tool === 'gitleaks' && !records(data, 'RuleID')) return { valid: false, reason: `${tool} emitted an invalid finding array.` };
+    if (tool === 'checkov' && (!object(data) || !object(data.results) || !records(data.results.failed_checks, 'check_id'))) return { valid: false, reason: `${tool} emitted an invalid failed-check array.` };
+    if (tool === 'zap') {
+      if (object(data) && Object.hasOwn(data, 'alerts') && Object.hasOwn(data, 'site')) return { valid: false, reason: `${tool} emitted ambiguous alert containers.` };
+      const alerts = object(data) && (Array.isArray(data.alerts) ? data.alerts : Array.isArray(data.site) && data.site.length === 1 && object(data.site[0]) ? data.site[0].alerts : null);
+      // The adapter supports one site. Never discard unsupported sites as an empty report.
+      if (!Array.isArray(alerts) || !alerts.every(item => object(item) && ['pluginid', 'alertRef', 'id'].some(key => typeof item[key] === 'string' && item[key].trim()))) return { valid: false, reason: `${tool} emitted an invalid or unsupported alert report.` };
+    }
     const resultKey = tool === 'trivy' ? 'Results' : ['semgrep', 'osv-scanner'].includes(tool) ? 'results' : null;
     if (resultKey && (!data || Array.isArray(data) || !Array.isArray(data[resultKey]))) return { valid: false, reason: `${tool} emitted an invalid structured result array.` };
+    if (tool === 'semgrep' && !records(data.results, 'check_id')) return { valid: false, reason: `${tool} emitted invalid finding records.` };
+    if (tool === 'trivy' && !data.Results.every(result => records([result], 'Target') && [['Vulnerabilities', 'VulnerabilityID'], ['Misconfigurations', 'ID'], ['Secrets', 'RuleID']].every(([key, field]) => result[key] == null || records(result[key], field)))) return { valid: false, reason: `${tool} emitted invalid nested result records.` };
+    if (tool === 'osv-scanner' && !data.results.every(result => object(result) && Array.isArray(result.packages) && result.packages.every(pkg => object(pkg) && object(pkg.package) && (pkg.vulnerabilities == null || records(pkg.vulnerabilities, 'id'))))) return { valid: false, reason: `${tool} emitted invalid package/advisory records.` };
     return { valid: true };
   } catch { return { valid: false, reason: `${tool} emitted malformed JSON output.` }; }
 }

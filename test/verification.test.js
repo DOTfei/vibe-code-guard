@@ -12,6 +12,65 @@ const { projectScopeFingerprint, verificationCoverage, verificationOutcome, veri
 
 const ROOT = path.resolve(__dirname, '..');
 
+test('all scanner output boundaries reject invalid shapes while preserving clean reports', () => {
+  const source = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  const validator = require('node:vm').runInNewContext('(' + source.slice(source.indexOf('function validateScannerOutput('), source.indexOf('\nfunction runtimeTargetReachable(')) + ')');
+  const clean = { gitleaks: '[]', trufflehog: '', nuclei: '', checkov: '{"results":{"failed_checks":[]}}', zap: '{"site":[{"alerts":[]}]}', semgrep: '{"results":[]}', trivy: '{"Results":[]}', 'osv-scanner': '{"results":[]}' };
+  for (const [tool, report] of Object.entries(clean)) {
+    assert.equal(validator(tool, report).valid, true, tool);
+    for (const invalid of ['null', '{}', 'true', '42', '"text"', '[null]', '[{}]']) assert.equal(validator(tool, invalid).valid, false, `${tool}: ${invalid}`);
+  }
+  for (const [tool, report] of [
+    ['trufflehog', '{"DetectorName":"synthetic"}\nnull'], ['nuclei', '{"template-id":"synthetic","info":{}}\n{}'],
+    ['gitleaks', '[{"RuleID":"synthetic"},null]'], ['checkov', '{"results":{"failed_checks":[{}]}}'],
+    ['zap', '{"alerts":[{}]}'], ['zap', '{"site":[{"alerts":[]},{"alerts":[{"pluginid":"synthetic"}]}]}'],
+    ['zap', '{"alerts":[],"site":[{"alerts":[{"pluginid":"synthetic"}]}]}'],
+    ['semgrep', '{"results":[{}]}'], ['semgrep', '{"results":[null]}'],
+    ['trivy', '{"Results":[{}]}'], ['trivy', '{"Results":[{"Target":"package-lock.json","Vulnerabilities":[{}]}]}'],
+    ['osv-scanner', '{"results":[{}]}'], ['osv-scanner', '{"results":[{"packages":[null]}]}'],
+    ['osv-scanner', '{"results":[{"packages":[{"package":{},"vulnerabilities":[{}]}]}]}'],
+  ]) assert.equal(validator(tool, report).valid, false, `${tool}: ${report}`);
+  assert.equal(validator('zap', '{"alerts":[]}').valid, true);
+  for (const [tool, report] of [
+    ['gitleaks', '[{"RuleID":"synthetic"}]'], ['trufflehog', '{"DetectorName":"synthetic"}'],
+    ['nuclei', '{"template-id":"synthetic","info":{"name":"Safe fixture"}}'],
+    ['checkov', '{"results":{"failed_checks":[{"check_id":"synthetic"}]}}'], ['zap', '{"alerts":[{"pluginid":"synthetic"}]}'],
+  ]) assert.equal(validator(tool, report).valid, true, `${tool}: ${report}`);
+});
+
+test('malformed secret reports cannot verify an unchanged finding through canonical verification', () => {
+  const { createMockToolchain, copyFixture } = require('./e2e/harness');
+  const tools = createMockToolchain({ findings: { gitleaks: [{ RuleID: 'synthetic-acceptance', File: 'src/config.js', StartLine: 1 }] } });
+  const project = fs.realpathSync(copyFixture('node-api'));
+  try {
+    fs.mkdirSync(path.join(project, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(project, 'src/config.js'), 'module.exports = { synthetic: true };\n');
+    const invoke = code => JSON.parse(execFileSync(process.execPath, ['-e', code], { env: tools.env, encoding: 'utf8', timeout: 30000 }));
+    const server = JSON.stringify(path.join(ROOT, 'server'));
+    const finding = invoke(`const {createRun,runAudit}=require(${server});const run=createRun({projectPath:${JSON.stringify(project)},mode:'auto',webTarget:null});runAudit(run).then(()=>console.log(JSON.stringify(run.correlatedFindings.find(f=>f.observations.some(o=>o.scanner==='gitleaks')))));`);
+    const indexFile = path.join(tools.dataDir, 'projects', projectIdentity(project).id, 'findings-index.json');
+    const initial = JSON.parse(fs.readFileSync(indexFile, 'utf8'));
+    initial.findings.find(f => f.id === finding.id).status = 'FIXED';
+    const verify = `const {verifyFinding}=require(${server});verifyFinding({projectPath:${JSON.stringify(project)},findingId:${JSON.stringify(finding.id)}}).then(r=>console.log(JSON.stringify({verification:r.verification.verification,status:r.finding.status})));`;
+    for (const tool of ['gitleaks', 'trufflehog']) {
+      for (const invalid of ['null', '{}', '[null]']) {
+        fs.writeFileSync(indexFile, JSON.stringify(initial));
+        for (const scanner of ['gitleaks', 'trufflehog']) {
+          const output = scanner === tool ? invalid : scanner === 'gitleaks' ? '[]' : '';
+          fs.writeFileSync(tools.paths[scanner], '#!' + process.execPath + '\nconst fs=require("node:fs"),args=process.argv.slice(2);if(args.includes("version")||args.includes("--version")){console.log("1.2.3");}else{' + (scanner === 'gitleaks' ? `fs.writeFileSync(args[args.indexOf("--report-path")+1],${JSON.stringify(output)});` : `process.stdout.write(${JSON.stringify(output)});`) + '}\n', { mode: 0o700 });
+        }
+        const result = invoke(verify);
+        assert.equal(result.verification, 'VERIFICATION_INCOMPLETE');
+        assert.notEqual(result.status, 'VERIFIED');
+        assert.notEqual(JSON.parse(fs.readFileSync(indexFile, 'utf8')).findings.find(f => f.id === finding.id).status, 'VERIFIED');
+      }
+    }
+  } finally {
+    fs.rmSync(tools.root, { recursive: true, force: true });
+    fs.rmSync(path.dirname(project), { recursive: true, force: true });
+  }
+});
+
 function syntheticGroup(category = 'INJECTION', scanner = 'semgrep') {
   const context = { projectId: 'project-verification', projectPath: '/tmp/vcg-verification-project', runId: '2026-08-11-000001', startedAt: '2026-08-11T00:00:00.000Z', observedAt: '2026-08-11T00:01:00.000Z' };
   const raw = createFinding({ scanner: { id: scanner, name: scanner, ruleId: 'synthetic.rule' }, severity: 'HIGH', category, title: 'Synthetic issue', location: { type: 'file', file: 'src/app.js', line: 5 }, evidence: 'Safe synthetic evidence.' }, context);
@@ -193,7 +252,7 @@ test('targeted verification integration verifies a fixed finding with only the r
   assert.deepEqual(result.scanners, ['semgrep']);
   const persisted = JSON.parse(fs.readFileSync(path.join(data, 'projects', identity.id, 'findings-index.json'), 'utf8'));
   assert.equal(persisted.findings[0].status, 'VERIFIED');
-  for (const invalid of ['null', '{}', '[]']) {
+  for (const invalid of ['null', '{}', '[]', '{"results":[{}]}', '{"results":[null]}']) {
     fs.writeFileSync(path.join(data, 'projects', identity.id, 'findings-index.json'), JSON.stringify({ schemaVersion: '1.0', projectId: identity.id, findings: [initial] }));
     fs.writeFileSync(fakeSemgrep, '#!/bin/sh\nif [ "$1" = "--version" ]; then printf \'1.2.3\\n\'; else printf \'%s\\n\' \'' + invalid + '\'; fi\n');
     const rejected = JSON.parse(execFileSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, SECURITY_TOOLKIT_HOME: toolkit, SECURITY_DASHBOARD_DATA_DIR: data, SECURITY_TOOL_BINARIES: JSON.stringify({ semgrep: fakeSemgrep }) } }));
