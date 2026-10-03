@@ -125,13 +125,42 @@ test('ambiguous legacy dependency identity defers verification instead of provin
   assert.ok(next.findings.some(item => item.id !== legacy.id && item.status === 'OPEN'));
 });
 
+test('legacy records without metadata preserve complete version tokens and defer previously truncated identities', () => {
+  const { adaptScannerOutput } = require('../core/findings');
+  const { extractPackageVersion, compareEvidence } = require('../core/correlation/correlation-key');
+  const tools = Object.fromEntries(['trivy', 'osv-scanner'].map(id => [id, { status: 'PASS', decision: 'RUN', parseValid: true, version: '1.0.0' }]));
+  for (const version of ['1.2.3-rc1', '1.2.3+build.7', '1.2.3~rc1', '2026.10.post1']) {
+    const context = { projectId: 'version-suffix-history', projectPath: '/tmp/version-suffix-history', runId: 'old' };
+    const raw = adaptScannerOutput('osv-scanner', JSON.stringify({ results: [{ source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] }] }), context)[0];
+    const oldRaw = createFinding({ ...raw, correlationMetadata: undefined, category: 'INJECTION', fingerprint: undefined, id: undefined }, context);
+    assert.equal(Object.hasOwn(oldRaw, 'correlationMetadata'), false);
+    assert.equal(extractPackageVersion(oldRaw, [oldRaw.explanation.technical]), version);
+    const legacy = reconcileFindings([], [oldRaw], context).findings[0];
+    legacy.status = 'FIXED'; legacy.scopeFingerprint = 'unchanged';
+    const unchanged = reconcileFindings([legacy], [raw], { ...context, tools, verificationScopeValid: true });
+    assert.equal(unchanged.findings.length, 1);
+    assert.equal(unchanged.findings[0].id, legacy.id);
+    assert.equal(unchanged.findings[0].status, 'OPEN');
+    // Real old indexes persist identity values; reparsing text cannot repair them.
+    legacy.observations[0].identity.installedVersion = version.split(/[-+~]|\.post/)[0];
+    const next = reconcileFindings([legacy], [raw], { ...context, tools, verificationScopeValid: true, verificationFindingId: legacy.id });
+    assert.equal(next.findings.find(f => f.id === legacy.id).status, 'FIXED');
+    assert.deepEqual(next.incompleteFindingIds, [legacy.id]);
+    const coverage = verificationCoverage(verificationPlan(legacy), tools, { currentScopeFingerprint: 'unchanged' });
+    coverage.complete = !next.incompleteFindingIds.includes(legacy.id) && coverage.complete;
+    assert.equal(verificationOutcome({ finding: legacy, updatedFinding: next.findings.find(f => f.id === legacy.id), coverage }).verification, 'VERIFICATION_INCOMPLETE');
+    const current = reconcileFindings([], [raw], context).findings[0].observations[0];
+    assert.equal(compareEvidence({ ...current, identity: { ...current.identity, installedVersion: '9.8.7' } }, legacy.observations[0]), 'NONE');
+  }
+});
+
 test('targeted verification persists unmatched evidence and reports ambiguous history as incomplete', () => {
   const { createMockToolchain, copyFixture } = require('./e2e/harness');
-  const report = { source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version: '1' }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] };
+  const report = { source: { path: 'requirements.txt' }, packages: [{ package: { name: 'synthetic-package', version: '1.2.3-rc1' }, vulnerabilities: [{ id: 'PYSEC-2026-123', summary: 'command injection' }] }] };
   const tools = createMockToolchain({ findings: { 'osv-scanner': [report] } });
   const project = fs.realpathSync(copyFixture('node-api'));
   try {
-    fs.writeFileSync(path.join(project, 'requirements.txt'), 'synthetic-package==1\n');
+    fs.writeFileSync(path.join(project, 'requirements.txt'), 'synthetic-package==1.2.3-rc1\n');
     const server = JSON.stringify(path.join(ROOT, 'server'));
     const invoke = code => JSON.parse(execFileSync(process.execPath, ['-e', code], { env: tools.env, encoding: 'utf8', timeout: 30000 }));
     invoke(`const {createRun,runAudit}=require(${server});const run=createRun({projectPath:${JSON.stringify(project)},mode:'auto',webTarget:null});runAudit(run).then(()=>console.log(JSON.stringify({ok:true})));`);
@@ -144,7 +173,7 @@ test('targeted verification persists unmatched evidence and reports ambiguous hi
     for (const observation of legacy.observations) {
       observation.category = 'INJECTION';
       observation.fingerprint = 'legacy-fingerprint';
-      observation.identity = { ...observation.identity, kind: 'static', packageName: null, installedVersion: null, vulnerabilityId: null };
+      observation.identity = { ...observation.identity, kind: 'static', packageName: 'synthetic-package', installedVersion: '1.2.3', vulnerabilityId: null };
     }
     const unrelated = JSON.parse(JSON.stringify(legacy));
     unrelated.id = 'VCG-CORR-00000000000002';
